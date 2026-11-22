@@ -38,45 +38,17 @@ function tone(frequency) {
 function platform(x,y,w,kind='solid',options={}) {
   return {x,y,w,kind,baseX:x,baseY:y,hit:null,gone:false,...options};
 }
-function makeWorld(s,l) {
+function makeWorld(s,l,room=0) {
   const n = offsets[s]+l;
-  const count = 4 + Math.floor(s/3);
-  const w = Math.round(73 - s*2.8 - l/counts[s]*10);
-  const xs = Array.from({length:count},(_,i)=>Math.round(169+i*(510/(count-1))));
-  const route = n ^ (n >> 1);
-  const floors = [platform(34,345,102)];
-  const keyIndex = (l+2*s)%count;
-  let key = null;
-  for (let i=0;i<count;i++) {
-    const x = xs[i] + (((n*7+i*17)%13)-6)*(s>0);
-    const y = 328 - ((route >> i)&1)*38 - ((n*13+i*19)%5)*6;
-    let kind = 'solid';
-    if (s>=2 && (i+l)%4===0) kind='moving';
-    else if (s>=3 && (i+l)%4===1) kind='timed';
-    else if ((i+l)%4===2 && n>0) kind='crumble';
-    const required = s>=4 && i===keyIndex;
-    if (required) kind='solid';
-    floors.push(platform(x,y,w,kind,{phase:(n*19+i*37)%176,range:12+s*1.4,period:Math.round(195-s*6-l/counts[s]*19),grace:Math.round(37-s*2-l/counts[s]*5)}));
-    if (required) key={x:x+w/2,y:y-27,collected:false};
-    if (s>=1 && (i+l)%3!==1) {
-      floors.push(platform(x+((i+s)%2?15:-12),y+72,w-5,'bait',{grace:7}));
-    }
-  }
-  if (n===0) { floors[2].kind='bait'; floors[2].grace=18; }
-  if (s>=7) {
-    const index = (l+s)% (count-1);
-    const x = Math.round((xs[index]+xs[index+1])/2);
-    floors.push(platform(x-16,365,32,'bait',{grace:6}));
-  }
-  const exitY = 307 + ((n*3)%5)*8;
-  floors.push(platform(763,exitY,76));
-  return {floors,key,exit:{x:790,y:exitY},reverse:s===9 && l%5===4};
+  if(n!==0)return makeEncounter(s,l,room);
+  return {
+    floors:[platform(34,345,102),platform(169,328,73),platform(339,304,73,'bait',{grace:18}),
+      platform(509,310,73),platform(679,316,73),platform(763,307,76)],
+    exit:{x:790,y:307}, rooms:1, room:0
+  };
 }
 function label() {
-  if (index===0) return 'First Jump';
-  if (world.reverse) return 'Wrong Way Round';
-  const titles = ['Watch Your Step','Mind the Gap','A Small Favor','One More Jump','Too Good to Be True','Think Fast','A Leg to Stand On','Almost There','Second Thoughts','Leap of Faith'];
-  return titles[(index+stage*3)%titles.length];
+  return world.theme?.[0] || 'First Jump';
 }
 function updateMenus() {
   const menu = $('stages');
@@ -108,33 +80,44 @@ function updateMenus() {
     menu.append(levels);
   });
 }
+function enterRoom(room) {
+  world=makeWorld(stage,level,room);
+  player={x:70,y:345,vx:0,vy:0,ground:world.floors[0],coyote:6,face:1};
+  ticks=0;delay=0;outcome='';won=false;jumpBuffer=0;
+  const hint=world.theme?.[6] || 'Reach the green exit';
+  const ruleHint=world.reverse&&world.rules[0]!=='mirror'?'Left and right are swapped. ': '';
+  $('status').textContent=ruleHint+hint;
+  $('level').textContent='LEVEL '+String(level+1).padStart(2,'0')+' / '+counts[stage]
+    +(world.rooms>1?' · ROOM '+(room+1)+' / '+world.rooms:'');
+  $('title').textContent=label();
+  $('stage').textContent='STAGE '+String(stage+1).padStart(2,'0')+' / '+(world.theme?.[1]||names[stage]).toUpperCase();
+}
 function start(next, refresh=true) {
   index=next;
   stage=offsets.findLastIndex(offset=>index>=offset);
   level=index-offsets[stage];
-  world=makeWorld(stage,level);
-  player={x:70,y:345,vx:0,vy:0,ground:world.floors[0],coyote:6,face:1};
-  ticks=0;delay=0;outcome='';won=false;jumpBuffer=0;
-  $('status').textContent=world.reverse?'Controls are reversed':world.key?'Collect the diamond to unlock the exit':index===0?'Reach the green exit':'';
+  enterRoom(0);
   if(!refresh) return;
   expanded=stage;
-  $('title').textContent=label();
-  $('stage').textContent='STAGE '+String(stage+1).padStart(2,'0')+' / '+names[stage].toUpperCase();
-  $('level').textContent='LEVEL '+String(level+1).padStart(2,'0')+' / '+counts[stage];
   $('progress').textContent=unlocked+' / '+total+' CLEARED';
   $('deaths').textContent='× '+deaths+' DEATHS';
   store();
   updateMenus();
 }
-function die() {
+function die(reason) {
   deaths++;
   store();
   $('deaths').textContent='× '+deaths+' DEATHS';
-  $('status').textContent='Ouch. Going again…';
+  $('status').textContent=reason || 'Ouch. Going again…';
   tone(90);
   outcome='death';delay=25;
 }
 function clear() {
+  if(world.room+1<world.rooms){
+    tone(540);
+    enterRoom(world.room+1);
+    return;
+  }
   unlocked=Math.max(unlocked,index+1);
   store();
   $('progress').textContent=unlocked+' / '+total+' CLEARED';
@@ -163,23 +146,26 @@ function step() {
   ticks++;
   for(const p of world.floors){
     const old=p.x;
-    if(p.kind==='moving')p.x=p.baseX+Math.sin((ticks+p.phase)/31)*p.range;
+    if(p.kind==='quake')p.x=p.baseX+Math.sin((ticks+p.phase)/24)*p.range;
     if(p.hit!==null && ticks-p.hit>=p.grace)p.gone=true;
     if(player.ground===p){
       if(!active(p))player.ground=null;
-      else player.x+=p.x-old;
+      else player.x+=p.x-old+(p.kind==='belt'?p.push:0);
     }
   }
   const left=keys.has('left')||[...pointers.values()].includes('left');
   const right=keys.has('right')||[...pointers.values()].includes('right');
   const direction=(Number(right)-Number(left))*(world.reverse?-1:1);
-  player.vx=direction*4.4;
+  const desired=direction*4.4;
+  player.vx=world.ice ? player.vx*.76+desired*.24 : desired;
+  if(world.wind && !player.ground)player.vx+=windAt(ticks);
   if(direction)player.face=direction;
   player.x=Math.max(12,Math.min(852,player.x+player.vx));
   if(player.ground && (player.x+8<=player.ground.x || player.x-8>=player.ground.x+player.ground.w)) player.ground=null;
   player.coyote=player.ground?6:Math.max(0,player.coyote-1);
   if(jumpBuffer>0 && player.coyote>0){
-    player.vy=-10.8;player.coyote=0;player.ground=null;jumpBuffer=0;tone(240);
+    player.vy=player.ground?.kind==='spring'?-12.4:-10.8;
+    player.coyote=0;player.ground=null;jumpBuffer=0;tone(240);
   }
   jumpBuffer=Math.max(0,jumpBuffer-1);
   if(!player.ground){
@@ -190,7 +176,7 @@ function step() {
       const landing=world.floors.filter(p=>active(p)&&oldY<=p.y&&player.y>=p.y&&player.x+8>p.x&&player.x-8<p.x+p.w).sort((a,b)=>a.y-b.y)[0];
       if(landing){
         player.y=landing.y;player.vy=0;player.ground=landing;
-        if((landing.kind==='crumble'||landing.kind==='bait') && landing.hit===null)landing.hit=ticks;
+        if((['crumble','bait','cliff'].includes(landing.kind)) && landing.hit===null)landing.hit=ticks;
       }
     }
   }
@@ -199,6 +185,8 @@ function step() {
     $('status').textContent='Exit unlocked';
     tone(480);
   }
+  const reason=trapHit();
+  if(reason){die(reason);return;}
   if(Math.abs(player.x-world.exit.x)<17 && Math.abs(player.y-world.exit.y)<24 && (!world.key||world.key.collected)){clear();return;}
   if(player.y>442)die();
 }
@@ -213,6 +201,11 @@ function words(value,x,y,color,size=12) {
   ctx.fillText(value,x,y);
 }
 function draw() {
+  if(world.theme)drawScenery();
+  else drawWarmupScenery();
+  drawPlayfield();
+}
+function drawWarmupScenery(){
   const bg=ctx.createLinearGradient(0,0,0,460);
   bg.addColorStop(0,'#1b1628');
   bg.addColorStop(.72,'#22182d');
@@ -236,6 +229,13 @@ function draw() {
     rect(x,425-h,34+(i%3)*7,h,'#171322');
     rect(x+5,430-h,2,Math.max(3,h-12),'#262034');
   }
+}
+function drawPlayfield(){
+  ctx.save();
+  if(world.quake && !(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)){
+    const tremor=Math.max(0,Math.sin((ticks+world.phase)/46));
+    ctx.translate(Math.sin(ticks*1.8)*tremor*3,Math.cos(ticks*1.3)*tremor*2);
+  }
   rect(0,432,864,28,'#241222');
   rect(0,432,864,2,'#873752');
   for(let x=-15;x<870;x+=26){
@@ -244,17 +244,28 @@ function draw() {
   }
   for(let i=0;i<38;i++)rect((i*47+ticks*.6)%864,415+(i*13)%42,4+(i%4)*3,1,'#ff54864d');
 
+  drawEncounters();
   for(const p of world.floors){
     if(!active(p)){
       if(!p.gone)rect(p.x,p.y,p.w,2,'#8c77a54d');
+      if(p.kind==='cliff' && p.gone){
+        const fall=ticks-p.hit-p.grace;
+        if(fall<28){
+          for(let i=0;i<4;i++)rect(p.x+i*p.w/4,p.y+fall*fall*.35+i*fall,p.w/4-2,14,'#876268');
+        }
+      }
       continue;
     }
     const cracking=p.hit!==null;
-    const cap=cracking?'#ff658c':p.kind==='moving'?'#7bdfec':p.kind==='timed'?'#c59fee':'#aa91bf';
+    const cap=cracking?'#ff658c':p.kind==='quake'?'#7bdfec':p.kind==='timed'?'#c59fee':p.kind==='spring'?'#d8ff45':world.theme?.[4]||'#aa91bf';
     rect(p.x,p.y,p.w,16,'#493453');
     rect(p.x,p.y,p.w,3,cap);
     rect(p.x,p.y+15,p.w,2,'#160f20');
     for(let x=7;x<p.w-3;x+=13)rect(p.x+x,p.y+7,5,3,'#654a73');
+    if(p.kind==='belt'){
+      for(let i=7;i<p.w-5;i+=12)rect(p.x+(i+ticks*Math.sign(p.push))%p.w,p.y+6,4,4,cap);
+    }
+    if(p.kind==='spring')rect(p.x+p.w*.38,p.y-4,p.w*.24,5,cap);
     if(cracking){
       rect(p.x+p.w*.45,p.y+2,3,5,'#301427');
       rect(p.x+p.w*.45+3,p.y+6,3,7,'#301427');
@@ -272,14 +283,7 @@ function draw() {
   glow.addColorStop(0,open?'#ccff4870':'#ffc46b50');
   glow.addColorStop(1,'#00000000');
   rect(exit.x-46,exit.y-66,92,92,glow);
-  const door=open?'#d8ff45':'#ffc46b';
-  rect(exit.x-17,exit.y-38,34,38,'#151b1d');
-  rect(exit.x-17,exit.y-38,3,38,door);
-  rect(exit.x+14,exit.y-38,3,38,door);
-  rect(exit.x-17,exit.y-38,34,3,door);
-  rect(exit.x-9,exit.y-29,18,29,open?'#84a92e':'#715530');
-  for(let i=0;i<4;i++)rect(exit.x-7+i*4,exit.y-25,1,24,open?'#b8e247':'#9c733a');
-  words('EXIT',exit.x-14,exit.y-46,door);
+  drawDoor(exit.x,exit.y,open);
 
   if(outcome!=='death'){
     const {x,y,face}=player;
@@ -298,6 +302,7 @@ function draw() {
       rect(player.x+Math.cos(angle)*radius,Math.min(player.y-15,417)+Math.sin(angle)*radius,4,4,'#ff748e');
     }
   }
+  ctx.restore();
   if(won){
     rect(0,0,864,460,'#141019e0');
     ctx.textAlign='center';words('YOU BEAT RAGE BAIT',432,231,'#d8ff45',38);
