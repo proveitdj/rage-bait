@@ -38,9 +38,6 @@ function tone(frequency) {
 function platform(x,y,w,kind='solid',options={}) {
   return {x,y,w,kind,baseX:x,baseY:y,hit:null,gone:false,...options};
 }
-function label() {
-  return world.theme[0];
-}
 function updateMenus() {
   const menu = $('stages');
   menu.replaceChildren();
@@ -73,14 +70,16 @@ function updateMenus() {
 }
 function enterRoom(room) {
   world=makeEncounter(stage,level,room);
-  player={x:70,y:345,vx:0,vy:0,ground:world.floors[0],coyote:6,face:1,stroke:0};
+  player={...world.spawn,vx:0,vy:0,ground:world.floors[0],coyote:6,
+    face:Math.sign(world.floors[1].x-world.spawn.x)||1,stroke:0};
   ticks=0;delay=0;outcome='';won=false;jumpBuffer=0;
-  $('status').textContent=world.theme[6];
+  $('status').textContent=(world.reverse?'Left and right are swapped. ':'')
+    +(world.task?.title || (world.zones.length?'Space swims. Reach the exit.':'Reach the exit.'));
   $('dangers').textContent=world.levelDangers+' THREATS';
   $('level').textContent='LEVEL '+String(level+1).padStart(2,'0')+' / '+counts[stage]
     +(world.rooms>1?' · ROOM '+(room+1)+' / '+world.rooms:'');
-  $('title').textContent=label();
-  $('stage').textContent='STAGE '+String(stage+1).padStart(2,'0')+' / '+(world.theme?.[1]||names[stage]).toUpperCase();
+  $('title').textContent=world.scene.title;
+  $('stage').textContent='STAGE '+String(stage+1).padStart(2,'0')+' / '+world.scene.setting.toUpperCase();
 }
 function start(next, refresh=true) {
   index=next;
@@ -152,8 +151,8 @@ function step() {
   if(world.wind && !wet && !player.ground)player.vx+=windAt(ticks);
   if(direction)player.face=direction;
   const nextX=Math.max(12,Math.min(852,player.x+player.vx));
-  const roof=tunnelCeiling(nextX);
-  if(roof===undefined || player.y-22>=roof-1)player.x=nextX;
+  const blocked=world.solids.some(b=>nextX+8>b.x && nextX-8<b.x+b.w && player.y>b.y && player.y-22<b.y+b.h);
+  if(!blocked)player.x=nextX;
   if(player.ground && (player.x+8<=player.ground.x || player.x-8>=player.ground.x+player.ground.w)) player.ground=null;
   player.coyote=player.ground?6:Math.max(0,player.coyote-1);
   player.stroke=Math.max(0,player.stroke-1);
@@ -167,27 +166,22 @@ function step() {
     const oldY=player.y;
     player.vy=Math.min(wet?3.9:16,player.vy+(wet?.36:.53));
     player.y+=player.vy;
-    const ceiling=tunnelCeiling(player.x);
-    if(ceiling!==undefined && player.vy<0 && player.y-22<ceiling){
-      player.y=ceiling+22;
-      player.vy=0;
+    if(player.vy<0){
+      const ceiling=world.solids.find(b=>player.x+8>b.x && player.x-8<b.x+b.w && oldY-22>=b.y+b.h && player.y-22<b.y+b.h);
+      if(ceiling){player.y=ceiling.y+ceiling.h+22;player.vy=0;}
     }
     if(player.vy>=0){
-      const landing=world.floors.filter(p=>active(p)&&oldY<=p.y&&player.y>=p.y&&player.x+8>p.x&&player.x-8<p.x+p.w).sort((a,b)=>a.y-b.y)[0];
+      const landing=world.supports.filter(p=>active(p)&&oldY<=p.y&&player.y>=p.y&&player.x+8>p.x&&player.x-8<p.x+p.w).sort((a,b)=>a.y-b.y)[0];
       if(landing){
         player.y=landing.y;player.vy=0;player.ground=landing;
         if((['crumble','bait','cliff'].includes(landing.kind)) && landing.hit===null)landing.hit=ticks;
       }
     }
   }
-  if(world.key && !world.key.collected && Math.abs(player.x-world.key.x)<20 && Math.abs(player.y-14-world.key.y)<23){
-    world.key.collected=true;
-    $('status').textContent='Exit unlocked';
-    tone(480);
-  }
+  updateObjective();
   const reason=campaignTrapHit();
   if(reason){die(reason);return;}
-  if(Math.abs(player.x-world.exit.x)<17 && Math.abs(player.y-world.exit.y)<24 && (!world.key||world.key.collected)){clear();return;}
+  if(Math.abs(player.x-world.exit.x)<17 && Math.abs(player.y-world.exit.y)<24 && taskOpen(world)){clear();return;}
   if(player.y>442)die();
 }
 
@@ -201,7 +195,7 @@ function words(value,x,y,color,size=12) {
   ctx.fillText(value,x,y);
 }
 function draw() {
-  drawTerrainBackdrop();
+  drawAnthologyBackdrop();
   drawPlayfield();
 }
 function drawPlayfield(){
@@ -230,7 +224,7 @@ function drawPlayfield(){
       continue;
     }
     const cracking=p.hit!==null;
-    const [terrainCap,body,detail]=terrainPlatformPalette(p);
+    const [terrainCap,body,detail]=anthologyPalette(p);
     const cap=cracking?'#ff658c':p.kind==='quake'?'#7bdfec':p.kind==='timed'?'#c59fee':p.kind==='spring'?'#d8ff45':terrainCap;
     rect(p.x,p.y,p.w,16,body);
     rect(p.x,p.y,p.w,3,cap);
@@ -246,19 +240,20 @@ function drawPlayfield(){
     }
   }
 
-  if(world.key && !world.key.collected){
-    const {x,y}=world.key;
-    const floating=Math.sin(ticks/13)*4;
-    ctx.save();ctx.translate(x,y+floating);ctx.rotate(Math.PI/4);
-    rect(-7,-7,14,14,'#ffce61');rect(-4,-4,8,8,'#fff4b9');ctx.restore();
+  for(const b of world.solids){
+    rect(b.x,b.y,b.w,b.h,world.scene.ink);
+    rect(b.x,b.y,b.w,3,world.scene.accent);
+    rect(b.x,b.y+b.h-3,b.w,3,'#111019');
+    for(let x=10;x<b.w-9;x+=25)rect(b.x+x,b.y+b.h-9,9,3,'#ffffff30');
   }
-  const exit=world.exit, open=!world.key||world.key.collected;
+  const exit=world.exit, open=taskOpen(world);
   const glow=ctx.createRadialGradient(exit.x,exit.y-20,4,exit.x,exit.y-20,46);
   glow.addColorStop(0,open?'#ccff4870':'#ffc46b50');
   glow.addColorStop(1,'#00000000');
   rect(exit.x-46,exit.y-66,92,92,glow);
   drawDoor(exit.x,exit.y,open);
   drawCampaignTraps();
+  drawObjective();
 
   if(outcome!=='death'){
     const {x,y,face}=player;
@@ -277,7 +272,7 @@ function drawPlayfield(){
       rect(player.x+Math.cos(angle)*radius,Math.min(player.y-15,417)+Math.sin(angle)*radius,4,4,'#ff748e');
     }
   }
-  drawTerrainForeground();
+  drawAnthologyForeground();
   ctx.restore();
   if(won){
     rect(0,0,864,460,'#141019e0');

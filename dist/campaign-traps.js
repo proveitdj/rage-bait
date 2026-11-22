@@ -24,47 +24,79 @@ const trapMessages = {
   spikes: 'The floor just lied to you.'
 };
 
-function configureCampaignTraps(course, count, stageRank, seed) {
+function campaignTrapCeiling(course, x, y) {
+  let ceiling;
+  for (const block of course.solids || []) {
+    const bottom = block.y + block.h;
+    if (x >= block.x && x < block.x + block.w && bottom <= y - 24) {
+      ceiling = Math.max(ceiling ?? bottom, bottom);
+    }
+  }
+  return ceiling;
+}
+
+const campaignBlockingKinds = new Set(['crumble', 'cliff', 'blink']);
+
+function configureCampaignTraps(course, count, stageRank, seed, {fixed, signature} = {}) {
   const rank = Math.max(0, Math.min(9, stageRank));
   const floors = course.floors.slice(1, -1);
   const used = new Set();
-  const themeTrap = campaignThemeTraps[course.theme?.[5]];
-  const preferredTerrain = {crusher:'tunnel', fish:'water', lava:'tunnel'}[themeTrap];
+  const taskMarkers = course.task ? [...course.task.items, course.task.target].filter(Boolean) : [];
+  const centerOf = floor => floor.x + floor.w / 2;
+  const zoneAt = x => course.zones?.find(zone => x >= zone.x && x < zone.end);
+  const canBreak = floor => floor.kind === 'solid' && !taskMarkers.some(marker =>
+    Math.abs(marker.x - centerOf(floor)) < floor.w / 2 && Math.abs(marker.y - floor.y) < 22);
   const assignments = Array.from({length:count}, (_, i) => floors[Math.floor((i + .5) * floors.length / count)]);
-  const preferred = floors.find(floor => floor.terrain === preferredTerrain);
-  if (preferred) {
+  const themeTrap = signature || campaignThemeTraps[course.theme?.[5]];
+  const preferred = floors.find(floor => {
+    if (campaignBlockingKinds.has(themeTrap)) return canBreak(floor);
+    if (themeTrap === 'crusher') return campaignTrapCeiling(course, centerOf(floor), floor.y) !== undefined;
+    if (themeTrap === 'fish' || themeTrap === 'mine') {
+      const zone = zoneAt(centerOf(floor));
+      return zone?.kind === 'water' && floor.y >= zone.surface;
+    }
+    return false;
+  });
+  if (preferred && !fixed) {
     const existing = assignments.indexOf(preferred);
     if (existing > 0) assignments[existing] = assignments[0];
     assignments[0] = preferred;
   }
+
+  const protectedAreas = [
+    course.spawn && {...course.spawn, radius:15, top:course.spawn.y - 23, bottom:course.spawn.y},
+    course.exit && {...course.exit, radius:26, top:course.exit.y - 45, bottom:course.exit.y + 24},
+    ...(!fixed ? taskMarkers.map(marker=>({...marker,radius:10,top:marker.y-22,bottom:marker.y+2})) : [])
+  ].filter(Boolean);
   course.obstacles = [];
   for (let i = 0; i < count; i++) {
-    const retained = i === 0 ? floors.find(floor => floor.kind === 'bait') : null;
-    const floor = retained || assignments[i];
-    const center = floor.x + floor.w / 2;
-    const zone = course.zones?.find(area => center >= area.x && center < area.end);
-    const kinds = campaignTrapKinds[zone?.kind || course.terrain] || campaignTrapKinds.land;
+    const authored = fixed?.[i];
+    const retained = i === 0 && !authored ? floors.find(floor => floor.kind === 'bait') : null;
+    const floor = authored ? course.floors[authored[0]] : retained || assignments[i];
+    const center = centerOf(floor);
+    const zone = zoneAt(center);
+    const terrain = zone?.kind || (campaignTrapCeiling(course, center, floor.y) === undefined ? course.terrain : 'tunnel');
+    const kinds = campaignTrapKinds[terrain] || campaignTrapKinds.land;
     const themed = i === 0 && themeTrap;
     const pool = kinds.filter(kind => !used.has(kind));
     const options = pool.length ? pool : kinds;
-    let kind = retained ? 'cliff' : themed || options[(seed + i * 19) % options.length];
-    const obstruction = ['crumble', 'cliff', 'blink'].includes(kind);
-    const guardsKey = course.key && Math.abs(course.key.x - center) < floor.w / 2;
-    if (obstruction && (guardsKey || floor.kind !== 'solid' && !retained)) kind = 'saw';
+    let kind = authored?.[1] || (retained ? 'cliff' : themed || options[(seed + i * 19) % options.length]);
+    if (!authored && !themed && !retained && campaignBlockingKinds.has(kind) && !canBreak(floor)) kind = 'saw';
 
     const previous = course.obstacles.findLast(trap => trap.floor === floor);
     const side = previous ? -previous.side : ((seed >>> (i % 19)) & 1) ? 1 : -1;
     const offset = Math.round(floor.w * (kind === 'decoy' ? .27 : .17)) * side;
-    const period = 132 - rank * 5 + (seed + i * 7) % 14;
+    const x = center + offset;
+    const period = !fixed && previous ? previous.period : 132 - rank * 5 + (seed + i * 7) % 14;
     const lead = Math.max(8, 21 - rank);
     const duration = Math.min(period - lead - 38, 27 + rank * 3 + (kind === 'fish' ? 6 : 0));
     const trap = {
       kind, floor, offset, side, period, lead, duration,
-      phase: (seed + i * 43) % period,
+      phase: !fixed && previous ? previous.phase : (seed + i * 43) % period,
       radius: 12 + Math.floor(rank * .9),
-      ceiling: zone?.ceiling,
-      surface: zone?.surface,
-      rightEdge: course.exit.x - 26
+      ceiling: campaignTrapCeiling(course, x, floor.y) ?? zone?.ceiling,
+      surface: zone?.kind === 'water' ? zone.surface : undefined,
+      protectedAreas
     };
     if (kind === 'cliff' || kind === 'crumble') {
       floor.kind = kind;
@@ -77,12 +109,30 @@ function configureCampaignTraps(course, count, stageRank, seed) {
     course.obstacles.push(trap);
     used.add(kind);
   }
+  if (!fixed) {
+    // Give a collapsing foothold enough time to catch the next blinking ledge.
+    for (let i=1;i<course.floors.length-1;i++) {
+      const floor=course.floors[i], next=course.floors[i+1];
+      if ((floor.kind==='crumble'||floor.kind==='cliff') && next.kind==='timed') floor.grace+=18;
+    }
+  }
 }
 
 function campaignTrapFrame(trap, time) {
   const frame = campaignTrapSprite(trap, time);
-  if (frame && !frame.warning) {
-    frame.x = Math.min(trap.rightEdge - frame.w / 2, frame.x);
+  if (!frame || frame.warning) return frame;
+  const areas = trap.protectedAreas;
+  const halfWidth = frame.w / 2;
+  const overlaps = (area,x) => frame.y < area.bottom && frame.y + frame.h > area.top &&
+    Math.abs(x - area.x) < area.radius + halfWidth;
+  if (areas.some(area => overlaps(area, frame.x))) {
+    const origin = frame.x;
+    const limits = areas
+      .flatMap(area => [area.x - area.radius - halfWidth - .1, area.x + area.radius + halfWidth + .1])
+      .filter(x => x - halfWidth >= 0 && x + halfWidth <= 864 && !areas.some(area => overlaps(area,x)));
+    if (limits.length) {
+      frame.x = limits.reduce((best,x) => Math.abs(x - origin) < Math.abs(best - origin) ? x : best);
+    }
   }
   return frame;
 }
@@ -110,8 +160,11 @@ function campaignTrapSprite(trap, time) {
     }
     case 'fire':
       return {x:x + (p - .5) * side * 29, y:22 + p * 438, w:radius * 1.55, h:26};
-    case 'fish':
-      return {x:x + (p - .5) * side * 28, y:420 - (443 - y) * Math.sin(Math.PI * p), w:radius * 2.35, h:29};
+    case 'fish': {
+      const bottom = trap.surface === undefined ? Math.min(420, y + 65) : Math.min(434, Math.max(y + 42, trap.surface + 70));
+      const top = bottom - (bottom - y + 23) * Math.sin(Math.PI * p);
+      return {x:x + (p - .5) * side * 28, y:top, w:radius * 2.35, h:29};
+    }
     case 'lava': {
       const surface = 448 - Math.sin(Math.PI * p) * (472 - y);
       return {x, y:surface, w:radius * 3.4, h:460 - surface};
