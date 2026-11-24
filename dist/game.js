@@ -69,6 +69,12 @@ function updateMenus() {
     menu.append(levels);
   });
 }
+function showLedgeProgress(count) {
+  $('route-progress').textContent=count+' / '+world.levelLedges+' LEDGES';
+  const meter=$('route-meter');
+  meter.max=world.levelLedges;
+  meter.value=count;
+}
 function enterRoom(room) {
   world=makeEncounter(stage,level,room,attempt);
   player={...world.spawn,vx:0,vy:0,ground:world.floors[0],coyote:6,
@@ -77,6 +83,8 @@ function enterRoom(room) {
   $('status').textContent=(world.reverse?'Left and right are swapped. ':'')
     +(world.task?.title || (world.zones.length?'Space swims. Reach the exit.':'Reach the exit.'));
   $('dangers').textContent=world.levelDangers+' THREATS';
+  world.ledgeReached=0;
+  showLedgeProgress(world.ledgeOffset);
   $('level').textContent='LEVEL '+String(level+1).padStart(2,'0')+' / '+counts[stage]
     +(world.rooms>1?' · ROOM '+(room+1)+' / '+world.rooms:'');
   $('title').textContent=world.scene.title;
@@ -109,6 +117,7 @@ function clear() {
     enterRoom(world.room+1);
     return;
   }
+  showLedgeProgress(world.levelLedges);
   unlocked=Math.max(unlocked,index+1);
   store();
   $('progress').textContent=unlocked+' / '+total+' CLEARED';
@@ -177,6 +186,10 @@ function step() {
       const landing=world.supports.filter(p=>active(p)&&oldY<=p.y&&player.y>=p.y&&player.x+8>p.x&&player.x-8<p.x+p.w).sort((a,b)=>a.y-b.y)[0];
       if(landing){
         player.y=landing.y;player.vy=0;player.ground=landing;
+        if(landing.routeIndex>world.ledgeReached){
+          world.ledgeReached=landing.routeIndex;
+          showLedgeProgress(world.ledgeOffset+world.ledgeReached);
+        }
         if((['crumble','bait','cliff'].includes(landing.kind)) && landing.hit===null)landing.hit=ticks;
       }
     }

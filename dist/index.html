@@ -152,6 +152,38 @@
       box-shadow: 0 0 0 1px var(--line);
       touch-action: none;
     }
+    .routebar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 13px;
+      border-bottom: 1px solid var(--line);
+      color: var(--amber);
+      font: 700 .8125rem var(--mono);
+      font-variant-numeric: tabular-nums;
+    }
+    .routebar:has(#route-progress:empty) { display: none; }
+    #route-meter {
+      appearance: none;
+      width: 100%;
+      height: 8px;
+      overflow: hidden;
+      border: 0;
+      border-radius: 2px;
+      background: var(--raised);
+      color: var(--orange);
+      accent-color: var(--orange);
+    }
+    #route-meter::-webkit-progress-bar {
+      background: var(--raised);
+    }
+    #route-meter::-webkit-progress-value {
+      background: linear-gradient(90deg, var(--orange), var(--amber));
+    }
+    #route-meter::-moz-progress-bar {
+      background: linear-gradient(90deg, var(--orange), var(--amber));
+    }
     .screenfoot {
       align-items: flex-start;
       min-height: 45px;
@@ -254,6 +286,7 @@
       .title-row { align-items: flex-start; flex-direction: column; margin-bottom: 14px; }
       .deaths { align-self: flex-start; }
       .screenbar, .screenfoot { font-size: .8125rem; gap: 6px 8px; padding-inline: 9px; }
+      .routebar { gap: 8px; padding-inline: 9px; }
       .screenfoot { flex-wrap: wrap; }
       #status { flex-basis: 100%; }
       #progress { text-align: left; }
@@ -291,6 +324,10 @@
             <span class="lives" aria-label="Unlimited lives">∞ LIVES</span>
           </div>
           <canvas id="game" width="864" height="460" tabindex="0" aria-label="Platform game. Use A and D to move, and Space to jump or swim."></canvas>
+          <div class="routebar">
+            <progress id="route-meter" max="1" value="0" aria-label="Ledge route progress"></progress>
+            <span id="route-progress"></span>
+          </div>
           <div class="screenfoot">
             <span id="status" role="status"></span>
             <span id="progress"></span>
@@ -317,4 +354,4 @@
       </aside>
     </div>
   </main>
-  <script src="anthology-intro.js"></script><script src="anthology-a.js"></script><script src="anthology-b.js"></script><script src="encounters.js"></script><script src="campaign-traps.js"></script><script src="objectives.js"></script><script src="anthology-art.js"></script><script src="retry-spikes.js"></script><script src="landforms.js"></script><script src="surprise-hazards.js"></script><script src="game.js"></script></body></html>
+  <script src="anthology-intro.js"></script><script src="anthology-a.js"></script><script src="anthology-b.js"></script><script src="endurance-routes.js"></script><script src="encounters.js"></script><script src="campaign-traps.js"></script><script src="objectives.js"></script><script src="anthology-art.js"></script><script src="retry-spikes.js"></script><script src="landforms.js"></script><script src="surprise-hazards.js"></script><script src="game.js"></script></body></html>

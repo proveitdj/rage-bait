@@ -27,11 +27,6 @@ const anthologyRoutes = {
   dropoff:{path:[[35,213,130],[190,200,104],[313,215,105],[368,355,153],[545,379,91],[655,333,96],[773,293,73]]},
 };
 
-// Preserve a crossing window where multiple independently timed traps overlap a spring jump.
-const roomTiming = {
-  '199:0': [[1,73],[2,90]],
-  '286:0': [[4,87],[7,4]],
-};
 const landformRoutes = {
   bridge:['ground','dock','ledge','dock','ledge','ground'],
   cellar:['cliff','ledge','ground','ground','hill','hill','ledge'],
@@ -66,10 +61,28 @@ function landformOptions(form,floor,floors,seed,i) {
   }
 }
 
-const longLevels = new Map([[24,6],[44,6],[69,7],[99,7],[133,7],[171,7],[213,7],[259,8],[309,8]]);
-function roomCount(n,s,l) {
-  if(n<10)return 1;
-  return longLevels.get(n) || (s>=5 && l%11===8 ? 4 : s>=2 && l%6===5 ? 3 : s>=1 && l%5===4 ? 2 : 1);
+const openingLedgeCounts = [6,12,18,15,27,21,32,24,35,40];
+function chapter(n) {
+  return n<160?anthologyA[n-10]:anthologyB[n-160];
+}
+function openingShape(n,seed) {
+  const [, ,art,route]=chapter(n);
+  return art==='cliff'&&seed%3===0?'dropoff':route;
+}
+function levelPlan(n) {
+  const first=n<10?anthologyIntro[n].route:anthologyRoutes[openingShape(n,mix(n*19))].path;
+  const start=first.length-1;
+  const totalLedges=openingLedgeCounts[n]??40;
+  const remaining=totalLedges-start;
+  if(!remaining)return [start];
+  const sections=Math.ceil(remaining/8);
+  const small=Math.floor(remaining/sections);
+  const extra=remaining%sections;
+  const offset=mix(n+51)%sections;
+  return [start,...Array.from({length:sections},(_,i)=>small+Number((i+offset)%sections<extra))];
+}
+function roomCount(n) {
+  return levelPlan(n).length;
 }
 function mix(n) {
   let x = Math.imul(n + 1, 0x9e3779b1);
@@ -82,9 +95,25 @@ function surpriseForLevel(n) {
   return draw<4?'giantSaw':draw<8?'lightning':null;
 }
 function levelDangerCount(n) {
-  if(n<10)return anthologyIntro[n].traps.length+1+Number(Boolean(surpriseForLevel(n)));
-  const s=offsets.findLastIndex(offset=>offset<=n);
-  return Math.max(roomCount(n,s,n-offsets[s]),2+Math.round(8*Math.sqrt(n/(total-1))));
+  const rooms=roomCount(n);
+  const authored=n<10?anthologyIntro[n].traps.length+1+Number(Boolean(surpriseForLevel(n))):0;
+  return Math.min(10,Math.max(authored+rooms-1,rooms+1,2+Math.round(8*Math.sqrt(n/(total-1)))));
+}
+function sectionDangerCount(levelDangers,rooms,room,opening) {
+  const first=Math.min(opening,levelDangers-rooms+1);
+  if(room===0)return first;
+  const remaining=levelDangers-first;
+  return Math.floor(remaining*room/(rooms-1))-Math.floor(remaining*(room-1)/(rooms-1));
+}
+function spendHazard(course,force=false) {
+  const direct=trap=>trap.floor && !['blink','cliff','crumble'].includes(trap.kind);
+  let replaced=course.obstacles.findLastIndex(trap=>trap.kind==='spikes');
+  if(replaced===-1)replaced=course.obstacles.findLastIndex(direct);
+  if(replaced===-1 && force)replaced=course.obstacles.findLastIndex(trap=>trap.floor);
+  if(replaced===-1)return false;
+  const [trap]=course.obstacles.splice(replaced,1);
+  if(!direct(trap))trap.floor.kind='solid';
+  return true;
 }
 function sceneColor(h,s,l) {
   const saturation=s/100, light=l/100;
@@ -131,24 +160,39 @@ function makeRoomTask(kind,labels,length,seed) {
 function makeEncounter(s,l,room,attempt=0) {
   const n=offsets[s]+l;
   const seed=mix(n*19+room);
-  const rooms=roomCount(n,s,l);
+  const plan=levelPlan(n);
+  const rooms=plan.length;
+  const levelLedges=plan.reduce((total,count)=>total+count,0);
   const levelDangers=levelDangerCount(n);
-  const roomDangers=Math.floor(levelDangers*(room+1)/rooms)-Math.floor(levelDangers*room/rooms);
+  const surpriseKind=surpriseForLevel(n);
+  const surpriseRoom=n<10?0:1+mix(n*37)%(rooms-1);
+  const wantsSurprise=surpriseKind && room===surpriseRoom;
+  const intro=n<10?anthologyIntro[n]:null;
+  const opening=intro?intro.traps.length+1+Number(Boolean(surpriseKind)):3;
+  const roomDangers=sectionDangerCount(levelDangers,rooms,room,opening);
+  const rank=room===0?s:Math.min(9,s+Math.floor(l*2/counts[s])+Math.floor(room/2));
   let scene, path, blocks, zones, task, rules, fixed, signature, signatureFloor, forms;
-  if(n<10){
-    const intro=anthologyIntro[n];
+  if(intro){
     const {title,setting,art,sky,ink,accent}=intro;
     scene={title,setting,art,sky,ink,accent,seed};
-    path=intro.route;blocks=intro.solids;zones=intro.zones;
-    task=intro.task;rules=intro.rules||{};fixed=intro.traps;forms=intro.forms;
   }else{
-    const [title,setting,art,route,mission,labels,trap]=n<160?anthologyA[n-10]:anthologyB[n-160];
+    const [title,setting,art]=chapter(n);
     scene=levelScene(title,setting,art,seed);
-    const names=Object.keys(anthologyRoutes).filter(name=>name!=='dropoff');
-    const shapeName=room===0 ? (art==='cliff'&&seed%3===0?'dropoff':route) : names[(names.indexOf(route)+room*5)%names.length];
+  }
+  if(room>0){
+    ({path,forms,blocks,zones,signature,signatureFloor}=enduranceRoute(plan[room],seed,rank));
+    rules={ice:scene.art==='ice'&&room%2===0,wind:scene.art==='storm'&&room%2===1};
+  }else if(intro){
+    path=intro.route;blocks=intro.solids;zones=intro.zones;
+    task=intro.task;rules=intro.rules||{};forms=intro.forms;
+    const keep=roomDangers-1-Number(Boolean(wantsSurprise));
+    fixed=intro.traps.length<=keep?intro.traps:intro.traps.filter((item,i)=>i===0||i>=intro.traps.length-keep+1);
+  }else{
+    const [, ,art,route,mission,labels,trap]=chapter(n);
+    const shapeName=openingShape(n,seed);
     const shape=anthologyRoutes[shapeName];
     forms=landformRoutes[shapeName];
-    const mirrored=room===0 ? (route!=='shaft' && route!=='terraces' && (seed>>>4)%4===0) : room%2===0;
+    const mirrored=route!=='shaft'&&route!=='terraces'&&(seed>>>4)%4===0;
     function left(x,w){return mirrored?864-x-w:x;}
     path=shape.path.map(([x,y,w,kind],i)=>{
       const width=w-(i>0&&i<shape.path.length-1?Math.round(s*.85)+((seed>>>(i*3))&3):0);
@@ -160,19 +204,20 @@ function makeEncounter(s,l,room,attempt=0) {
       const [x,end,surface]=shape.water;
       zones=[{kind:'water',x:left(x,end-x),end:left(x,end-x)+end-x,surface}];
     }
-    task=room===0?makeRoomTask(mission,labels,path.length,seed):null;
+    task=makeRoomTask(mission,labels,path.length,seed);
     rules={ice:art==='ice',wind:art==='storm',reverse:art==='mirror'&&s>=3};
     signature=shapeName==='dropoff'?'cliff':trap;
     if(shapeName==='dropoff')signatureFloor=2;
   }
-  const floors=path.map(([x,y,w,kind])=>platform(x,y,w,kind||'solid',{
-    terrain:zones?.some(z=>z.kind==='water'&&x+w/2>=z.x&&x+w/2<z.end&&y>=z.surface)?'water':'land'
+  const floors=path.map(([x,y,w,kind],routeIndex)=>platform(x,y,w,kind||'solid',{
+    routeIndex,terrain:zones?.some(z=>z.kind==='water'&&x+w/2>=z.x&&x+w/2<z.end&&y>=z.surface)?'water':'land'
   }));
   floors.forEach((floor,i)=>landformOptions(forms?.[i],floor,floors,seed,i));
   const center=p=>({x:p.x+p.w/2,y:p.y});
   const spawn=center(floors[0]),exit=center(floors.at(-1));
   const course={
-    scene, floors, spawn, exit, room, rooms, levelDangers,
+    scene, floors, spawn, exit, room, rooms, levelDangers, levelLedges,
+    ledgeOffset:plan.slice(0,room).reduce((total,count)=>total+count,0),
     task:mapTask(task,floors),
     zones:zones||[],
     solids:(blocks||[]).map(([x,y,w,h])=>({x,y,w,h,kind:'solid',hit:null})),
@@ -180,36 +225,20 @@ function makeEncounter(s,l,room,attempt=0) {
     phase:seed%200, ...rules
   };
   course.supports=[...floors,...course.solids];
-  configureCampaignTraps(course,fixed?.length??roomDangers,s,seed,{fixed,signature,signatureFloor});
-  for(const [i,phase] of roomTiming[n+':'+room]||[])course.obstacles[i].phase=phase;
-  configureRetrySpikes(course,attempt,seed);
-  if(course.retrySpikes.banks.length){
-    if(!fixed){
-      const canSwap=trap=>!['blink','cliff','crumble'].includes(trap.kind);
-      let replaced=course.obstacles.findLastIndex(trap=>trap.kind==='spikes');
-      if(replaced===-1)replaced=course.obstacles.findLastIndex((trap,i)=>i>0&&canSwap(trap));
-      if(replaced===-1 && room>0)replaced=course.obstacles.findLastIndex(canSwap);
-      if(replaced===-1 && room===rooms-1){
-        replaced=course.obstacles.length-1;
-        course.obstacles[replaced].floor.kind='solid';
-      }
-      if(replaced!==-1)course.obstacles.splice(replaced,1);
-      else course.retrySpikes.banks.length=0;
-    }
-    if(course.retrySpikes.banks.length)course.obstacles.push({kind:'retrySpikes'});
+  configureCampaignTraps(course,fixed?.length??roomDangers,rank,seed,{fixed,signature,signatureFloor});
+  if(wantsSurprise){
+    configureSurprise(course,n,room,attempt,seed,surpriseKind);
+    if(course.surprise && (fixed || spendHazard(course,true)))course.obstacles.push({kind:surpriseKind});
+    else course.surprise=null;
   }
-  const surpriseKind=surpriseForLevel(n);
-  const surpriseRoom=mix(n*37)%rooms;
-  if(surpriseKind && room===surpriseRoom){
-    const replacement=course.obstacles.findLastIndex(trap=>!['retrySpikes','blink','cliff','crumble'].includes(trap.kind));
-    if(fixed || replacement!==-1){
-      configureSurprise(course,n,room,attempt,seed,surpriseKind);
-      if(course.surprise){
-        if(!fixed)course.obstacles.splice(replacement,1);
-        course.obstacles.push({kind:surpriseKind});
-      }
-    }
+  if(room===0 || !wantsSurprise && (room+seed)%3!==0){
+    configureRetrySpikes(course,attempt,seed);
+    if(course.retrySpikes.banks.length && (fixed || spendHazard(course,room===0))){
+      course.obstacles.push({kind:'retrySpikes'});
+    }else course.retrySpikes.banks.length=0;
   }
+  // The final low tunnel on this course needs a gap between the two saws.
+  if(n===259 && room===5 && course.obstacles[0]?.kind==='saw')course.obstacles[0].phase=12;
   return course;
 }
 function waterAt(x,y) {
