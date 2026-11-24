@@ -148,7 +148,13 @@ function step() {
     const old=p.x;
     if(p.form==='boat')p.x=boatPosition(p,ticks);
     else if(p.kind==='quake')p.x=p.baseX+Math.sin((ticks+p.phase)/24)*p.range;
-    if(p.hit!==null && ticks-p.hit>=p.grace)p.gone=true;
+    if(p.hit!==null){
+      const age=ticks-p.hit;
+      if(p.recovery && age>=p.grace+p.recovery){
+        p.hit=null;
+        p.gone=false;
+      }else if(age>=p.grace)p.gone=true;
+    }
     if(player.ground===p){
       if(!active(p))player.ground=null;
       else player.x+=p.x-old+(p.kind==='belt'?p.push:0);
@@ -195,7 +201,7 @@ function step() {
     }
   }
   updateObjective();
-  const reason=surpriseHit() || retrySpikeHit() || campaignTrapHit();
+  const reason=extraHazardHit() || surpriseHit() || retrySpikeHit() || campaignTrapHit();
   if(reason){die(reason);return;}
   if(Math.abs(player.x-world.exit.x)<17 && Math.abs(player.y-world.exit.y)<24 && taskOpen(world)){clear();return;}
   if(player.y>442)die();
@@ -273,6 +279,7 @@ function drawPlayfield(){
   drawCampaignTraps();
   drawRetrySpikes();
   drawSurprise();
+  drawExtraHazards();
   drawObjective();
 
   if(outcome!=='death'){

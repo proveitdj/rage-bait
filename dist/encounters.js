@@ -94,10 +94,38 @@ function surpriseForLevel(n) {
   const draw=mix(n*257+174)%10;
   return draw<4?'giantSaw':draw<8?'lightning':null;
 }
-function levelDangerCount(n) {
+function baseDangerCount(n) {
   const rooms=roomCount(n);
   const authored=n<10?anthologyIntro[n].traps.length+1+Number(Boolean(surpriseForLevel(n))):0;
   return Math.min(10,Math.max(authored+rooms-1,rooms+1,2+Math.round(8*Math.sqrt(n/(total-1)))));
+}
+function extraDangerCount(n,s,room) {
+  return 2+Number(n>=4)+Number(n>=8)+Number(s>=7&&room%2===1);
+}
+function levelDangerCount(n) {
+  const stage=offsets.findLastIndex(offset=>offset<=n);
+  return baseDangerCount(n)+levelPlan(n).reduce((count,_,room)=>count+extraDangerCount(n,stage,room),0);
+}
+function prepareExtraCliff(course,rank,seed) {
+  const markers=[...course.task?.items||[],course.task?.target].filter(Boolean);
+  const banks=course.retrySpikes?.banks||[];
+  const surprise=course.surprise?.candidates||[];
+  const candidates=course.floors.slice(1,-1).filter(floor =>
+    (!banks.length || banks.filter(bank=>bank.floor!==floor).length>=2) &&
+    (!surprise.length || surprise.some(anchor=>anchor.floor!==floor)) &&
+    floor.kind==='solid' && floor.form!=='boat' && floor.w>=48 &&
+    !course.floors.some(other=>other.kind==='cliff'&&Math.abs(other.routeIndex-floor.routeIndex)<=1) &&
+    !markers.some(marker=>Math.abs(marker.y-floor.y)<35 &&
+      marker.x>=floor.x-14 && marker.x<=floor.x+floor.w+14));
+  if(!candidates.length)return null;
+  const cliffs=candidates.filter(floor=>['cliff','hill','ground'].includes(floor.form));
+  const pool=cliffs.length?cliffs:candidates;
+  const floor=pool[seed%pool.length];
+  floor.kind='cliff';
+  landformOptions('cliff',floor,course.floors,seed,floor.routeIndex);
+  floor.grace=26-Math.floor(rank*.9);
+  floor.recovery=94+rank*4;
+  return {kind:'cliff',floor,extra:true};
 }
 function sectionDangerCount(levelDangers,rooms,room,opening) {
   const first=Math.min(opening,levelDangers-rooms+1);
@@ -163,13 +191,14 @@ function makeEncounter(s,l,room,attempt=0) {
   const plan=levelPlan(n);
   const rooms=plan.length;
   const levelLedges=plan.reduce((total,count)=>total+count,0);
+  const baseDangers=baseDangerCount(n);
   const levelDangers=levelDangerCount(n);
   const surpriseKind=surpriseForLevel(n);
   const surpriseRoom=n<10?0:1+mix(n*37)%(rooms-1);
   const wantsSurprise=surpriseKind && room===surpriseRoom;
   const intro=n<10?anthologyIntro[n]:null;
   const opening=intro?intro.traps.length+1+Number(Boolean(surpriseKind)):3;
-  const roomDangers=sectionDangerCount(levelDangers,rooms,room,opening);
+  const roomDangers=sectionDangerCount(baseDangers,rooms,room,opening);
   const rank=room===0?s:Math.min(9,s+Math.floor(l*2/counts[s])+Math.floor(room/2));
   let scene, path, blocks, zones, task, rules, fixed, signature, signatureFloor, forms;
   if(intro){
@@ -237,6 +266,23 @@ function makeEncounter(s,l,room,attempt=0) {
       course.obstacles.push({kind:'retrySpikes'});
     }else course.retrySpikes.banks.length=0;
   }
+  const extraCount=extraDangerCount(n,s,room);
+  const wantsCliff=extraCount>=3 && ((seed>>>8)%3!==0 || extraCount===5);
+  const extraCliff=wantsCliff?prepareExtraCliff(course,rank,seed):null;
+  if(extraCliff){
+    course.obstacles.push(extraCliff);
+    if(course.retrySpikes?.banks.length){
+      const spikes=course.retrySpikes;
+      spikes.banks=spikes.banks.filter(bank=>bank.floor!==extraCliff.floor);
+      spikes.index%=spikes.banks.length;
+    }
+    if(course.surprise){
+      const hazard=course.surprise;
+      hazard.candidates=hazard.candidates.filter(anchor=>anchor.floor!==extraCliff.floor);
+      hazard.first%=hazard.candidates.length;
+    }
+  }
+  configureExtraHazards(course,extraCount-Number(Boolean(extraCliff)),rank,n,room,attempt,seed);
   // The final low tunnel on this course needs a gap between the two saws.
   if(n===259 && room===5 && course.obstacles[0]?.kind==='saw')course.obstacles[0].phase=12;
   return course;
