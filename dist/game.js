@@ -20,6 +20,7 @@ let stage, level, world, player, ticks, delay, outcome, expanded, won = false;
 const keys = new Set();
 const pointers = new Map();
 let jumpBuffer = 0;
+let attempt = 0;
 const store = () => {
   try { localStorage.setItem('rage-bait-v1',JSON.stringify({unlocked,index,deaths})); }
   catch {}
@@ -69,7 +70,7 @@ function updateMenus() {
   });
 }
 function enterRoom(room) {
-  world=makeEncounter(stage,level,room);
+  world=makeEncounter(stage,level,room,attempt);
   player={...world.spawn,vx:0,vy:0,ground:world.floors[0],coyote:6,
     face:Math.sign(world.floors[1].x-world.spawn.x)||1,stroke:0};
   ticks=0;delay=0;outcome='';won=false;jumpBuffer=0;
@@ -81,7 +82,8 @@ function enterRoom(room) {
   $('title').textContent=world.scene.title;
   $('stage').textContent='STAGE '+String(stage+1).padStart(2,'0')+' / '+world.scene.setting.toUpperCase();
 }
-function start(next, refresh=true) {
+function start(next, refresh=true, retry=false) {
+  attempt=retry?attempt+1:0;
   index=next;
   stage=offsets.findLastIndex(offset=>index>=offset);
   level=index-offsets[stage];
@@ -128,14 +130,15 @@ function step() {
   if(delay){
     if(--delay===0) {
       if(outcome==='clear') start(index+1);
-      else start(index,false);
+      else start(index,false,true);
     }
     return;
   }
   ticks++;
   for(const p of world.floors){
     const old=p.x;
-    if(p.kind==='quake')p.x=p.baseX+Math.sin((ticks+p.phase)/24)*p.range;
+    if(p.form==='boat')p.x=boatPosition(p,ticks);
+    else if(p.kind==='quake')p.x=p.baseX+Math.sin((ticks+p.phase)/24)*p.range;
     if(p.hit!==null && ticks-p.hit>=p.grace)p.gone=true;
     if(player.ground===p){
       if(!active(p))player.ground=null;
@@ -179,7 +182,7 @@ function step() {
     }
   }
   updateObjective();
-  const reason=campaignTrapHit();
+  const reason=surpriseHit() || retrySpikeHit() || campaignTrapHit();
   if(reason){die(reason);return;}
   if(Math.abs(player.x-world.exit.x)<17 && Math.abs(player.y-world.exit.y)<24 && taskOpen(world)){clear();return;}
   if(player.y>442)die();
@@ -226,10 +229,12 @@ function drawPlayfield(){
     const cracking=p.hit!==null;
     const [terrainCap,body,detail]=anthologyPalette(p);
     const cap=cracking?'#ff658c':p.kind==='quake'?'#7bdfec':p.kind==='timed'?'#c59fee':p.kind==='spring'?'#d8ff45':terrainCap;
-    rect(p.x,p.y,p.w,16,body);
-    rect(p.x,p.y,p.w,3,cap);
-    rect(p.x,p.y+15,p.w,2,'#160f20');
-    for(let x=7;x<p.w-3;x+=13)rect(p.x+x,p.y+7,5,3,detail);
+    if(!drawLandform(p,[cap,body,detail])){
+      rect(p.x,p.y,p.w,16,body);
+      rect(p.x,p.y,p.w,3,cap);
+      rect(p.x,p.y+15,p.w,2,'#160f20');
+      for(let x=7;x<p.w-3;x+=13)rect(p.x+x,p.y+7,5,3,detail);
+    }
     if(p.kind==='belt'){
       for(let i=7;i<p.w-5;i+=12)rect(p.x+(i+ticks*Math.sign(p.push))%p.w,p.y+6,4,4,cap);
     }
@@ -253,6 +258,8 @@ function drawPlayfield(){
   rect(exit.x-46,exit.y-66,92,92,glow);
   drawDoor(exit.x,exit.y,open);
   drawCampaignTraps();
+  drawRetrySpikes();
+  drawSurprise();
   drawObjective();
 
   if(outcome!=='death'){
@@ -285,7 +292,7 @@ const bindings={KeyA:'left',ArrowLeft:'left',KeyD:'right',ArrowRight:'right',Spa
 document.addEventListener('keydown',e=>{
   const action=bindings[e.code];
   const interactive=e.target instanceof HTMLButtonElement;
-  if(e.code==='KeyR'&&!e.repeat){start(index);return;}
+  if(e.code==='KeyR'&&!e.repeat){start(index,true,true);return;}
   if(!action || (interactive&&e.code==='Space'))return;
   e.preventDefault();
   if(action==='jump'){
@@ -318,7 +325,7 @@ for(const action of ['left','right','jump']){
     if(e.detail===0&&action==='jump')jumpBuffer=7;
   });
 }
-$('restart').onclick=()=>{start(index);canvas.focus();};
+$('restart').onclick=()=>{start(index,true,true);canvas.focus();};
 $('sound').onclick=()=>{
   muted=!muted;
   if(!muted){

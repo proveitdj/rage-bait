@@ -8,7 +8,7 @@ const anthologyRoutes = {
   shaft:{path:[[42,383,107],[171,353,93],[280,307,101],[390,258,104],[506,211,95],[622,160,86],[733,114,108]]},
   switchback:{path:[[31,388,122],[180,382,104],[324,367,101],[461,365,95],[593,351,102],[733,311,104],
     [644,266,90],[530,228,92],[397,192,87],[267,159,87],[137,135,100],[30,107,73]]},
-  reef:{path:[[38,298,121],[191,345,79],[302,391,89],[424,372,90],[544,348,87],[654,309,84],[757,269,83]],
+  reef:{path:[[38,298,121],[191,290,79],[302,391,89],[424,372,90],[544,348,87],[654,309,84],[757,269,83]],
     water:[151,741,296]},
   columns:{path:[[36,366,111],[167,322,58],[278,274,56],[387,223,59],[502,257,57],[602,211,67],[734,171,105]]},
   zigzag:{path:[[27,310,110],[158,253,83],[274,303,77],[387,248,79],[503,284,79],[619,223,78],[741,270,90]]},
@@ -24,6 +24,7 @@ const anthologyRoutes = {
   ramparts:{path:[[25,388,102],[163,349,81],[280,295,73],[394,239,87],[509,292,84],[629,250,96],[760,194,83]]},
   basin:{path:[[32,264,126],[176,313,81],[277,365,124],[417,384,121],[552,365,86],[661,311,89],[772,264,73]],
     water:[241,655,330]},
+  dropoff:{path:[[35,213,130],[190,200,104],[313,215,105],[368,355,153],[545,379,91],[655,333,96],[773,293,73]]},
 };
 
 // Preserve a crossing window where multiple independently timed traps overlap a spring jump.
@@ -31,6 +32,40 @@ const roomTiming = {
   '199:0': [[1,73],[2,90]],
   '286:0': [[4,87],[7,4]],
 };
+const landformRoutes = {
+  bridge:['ground','dock','ledge','dock','ledge','ground'],
+  cellar:['cliff','ledge','ground','ground','hill','hill','ledge'],
+  shaft:['ground','hill','hill','cliff','ledge','cliff','cliff'],
+  switchback:['ground','ground','hill','hill','hill','hill','ledge','ledge','ledge','ledge','ledge','cliff'],
+  reef:['dock','boat','ground','ground','ledge','dock','cliff'],
+  columns:['ground','cliff','cliff','cliff','ledge','cliff','cliff'],
+  zigzag:['ground','cliff','ground','ledge','hill','cliff','ground'],
+  courtyard:['ground','ground','hill','ground','hill','ground'],
+  terraces:['ground','hill','hill','hill','cliff','ledge','cliff'],
+  underpass:['ground','ground','ground','ground','ground','ground','hill','ground'],
+  twinpits:['cliff','ground','cliff','hill','ground','hill','ground'],
+  islands:['ground','ledge','ground','cliff','ground','cliff','ground'],
+  canopy:['ground','hill','ledge','ledge','ledge','ledge','cliff'],
+  spillway:['cliff','hill','boat','ground','ground','dock','cliff'],
+  ramparts:['ground','hill','cliff','cliff','ledge','hill','cliff'],
+  basin:['cliff','hill','ground','ground','ground','dock','cliff'],
+  dropoff:['cliff','cliff','cliff','ground','ground','hill','ground']
+};
+function landformOptions(form,floor,floors,seed,i) {
+  const options=typeof form==='string'?{form}:form;
+  if(!options)return;
+  Object.assign(floor,options);
+  if(options.form==='boat'){
+    floor.range=options.range??(10+seed%7);
+    floor.period=options.period??(160+seed%37);
+    floor.phase=(seed+i*23)%floor.period;
+    floor.x=boatPosition(floor,0);
+  }else if(floor.bottom===undefined && ['ground','hill','cliff'].includes(floor.form)){
+    const below=floors.find(other=>other.y>floor.y+12 && other.x<floor.x+floor.w && other.x+other.w>floor.x);
+    if(below)floor.bottom=Math.max(floor.y+12,Math.min(floor.y+65,below.y-8));
+  }
+}
+
 const longLevels = new Map([[24,6],[44,6],[69,7],[99,7],[133,7],[171,7],[213,7],[259,8],[309,8]]);
 function roomCount(n,s,l) {
   if(n<10)return 1;
@@ -41,8 +76,13 @@ function mix(n) {
   x = Math.imul(x ^ (x >>> 16), 0x21f0aaad);
   return (x ^ (x >>> 15)) >>> 0;
 }
+function surpriseForLevel(n) {
+  if(n<10)return {1:'giantSaw',2:'lightning',5:'giantSaw',8:'lightning',9:'giantSaw'}[n]||null;
+  const draw=mix(n*257+174)%10;
+  return draw<4?'giantSaw':draw<8?'lightning':null;
+}
 function levelDangerCount(n) {
-  if(n<10)return anthologyIntro[n].traps.length;
+  if(n<10)return anthologyIntro[n].traps.length+1+Number(Boolean(surpriseForLevel(n)));
   const s=offsets.findLastIndex(offset=>offset<=n);
   return Math.max(roomCount(n,s,n-offsets[s]),2+Math.round(8*Math.sqrt(n/(total-1))));
 }
@@ -65,8 +105,14 @@ function levelScene(title,setting,art,seed) {
     accent:sceneColor((hue+56)%360,67,72)
   };
 }
+function boatPosition(floor,time) {
+  return floor.baseX+Math.sin((time+floor.phase)/floor.period*(Math.PI*2))*floor.range;
+}
 function mapTask(task,floors) {
-  const point=([i,label])=>({x:floors[i].x+floors[i].w/2,y:floors[i].y,label});
+  const point=([i,label])=>{
+    const floor=floors[i];
+    return {get x(){return floor.x+floor.w/2;},y:floor.y,label};
+  };
   return task ? {kind:task.kind,title:task.title,items:task.items.map(point),target:task.target&&point(task.target)} : null;
 }
 function makeRoomTask(kind,labels,length,seed) {
@@ -82,24 +128,26 @@ function makeRoomTask(kind,labels,length,seed) {
     items:labels.map((label,i)=>[labels.length===1?Math.ceil(last/2):1+Math.round(i*(last-1)/(labels.length-1)),label])
   };
 }
-function makeEncounter(s,l,room) {
+function makeEncounter(s,l,room,attempt=0) {
   const n=offsets[s]+l;
   const seed=mix(n*19+room);
   const rooms=roomCount(n,s,l);
   const levelDangers=levelDangerCount(n);
   const roomDangers=Math.floor(levelDangers*(room+1)/rooms)-Math.floor(levelDangers*room/rooms);
-  let scene, path, blocks, zones, task, rules, fixed, signature;
+  let scene, path, blocks, zones, task, rules, fixed, signature, signatureFloor, forms;
   if(n<10){
     const intro=anthologyIntro[n];
     const {title,setting,art,sky,ink,accent}=intro;
     scene={title,setting,art,sky,ink,accent,seed};
     path=intro.route;blocks=intro.solids;zones=intro.zones;
-    task=intro.task;rules=intro.rules||{};fixed=intro.traps;
+    task=intro.task;rules=intro.rules||{};fixed=intro.traps;forms=intro.forms;
   }else{
     const [title,setting,art,route,mission,labels,trap]=n<160?anthologyA[n-10]:anthologyB[n-160];
     scene=levelScene(title,setting,art,seed);
-    const names=Object.keys(anthologyRoutes);
-    const shape=anthologyRoutes[room===0?route:names[(names.indexOf(route)+room*5)%names.length]];
+    const names=Object.keys(anthologyRoutes).filter(name=>name!=='dropoff');
+    const shapeName=room===0 ? (art==='cliff'&&seed%3===0?'dropoff':route) : names[(names.indexOf(route)+room*5)%names.length];
+    const shape=anthologyRoutes[shapeName];
+    forms=landformRoutes[shapeName];
     const mirrored=room===0 ? (route!=='shaft' && route!=='terraces' && (seed>>>4)%4===0) : room%2===0;
     function left(x,w){return mirrored?864-x-w:x;}
     path=shape.path.map(([x,y,w,kind],i)=>{
@@ -114,11 +162,13 @@ function makeEncounter(s,l,room) {
     }
     task=room===0?makeRoomTask(mission,labels,path.length,seed):null;
     rules={ice:art==='ice',wind:art==='storm',reverse:art==='mirror'&&s>=3};
-    signature=trap;
+    signature=shapeName==='dropoff'?'cliff':trap;
+    if(shapeName==='dropoff')signatureFloor=2;
   }
   const floors=path.map(([x,y,w,kind])=>platform(x,y,w,kind||'solid',{
     terrain:zones?.some(z=>z.kind==='water'&&x+w/2>=z.x&&x+w/2<z.end&&y>=z.surface)?'water':'land'
   }));
+  floors.forEach((floor,i)=>landformOptions(forms?.[i],floor,floors,seed,i));
   const center=p=>({x:p.x+p.w/2,y:p.y});
   const spawn=center(floors[0]),exit=center(floors.at(-1));
   const course={
@@ -130,8 +180,36 @@ function makeEncounter(s,l,room) {
     phase:seed%200, ...rules
   };
   course.supports=[...floors,...course.solids];
-  configureCampaignTraps(course,roomDangers,s,seed,{fixed,signature});
+  configureCampaignTraps(course,fixed?.length??roomDangers,s,seed,{fixed,signature,signatureFloor});
   for(const [i,phase] of roomTiming[n+':'+room]||[])course.obstacles[i].phase=phase;
+  configureRetrySpikes(course,attempt,seed);
+  if(course.retrySpikes.banks.length){
+    if(!fixed){
+      const canSwap=trap=>!['blink','cliff','crumble'].includes(trap.kind);
+      let replaced=course.obstacles.findLastIndex(trap=>trap.kind==='spikes');
+      if(replaced===-1)replaced=course.obstacles.findLastIndex((trap,i)=>i>0&&canSwap(trap));
+      if(replaced===-1 && room>0)replaced=course.obstacles.findLastIndex(canSwap);
+      if(replaced===-1 && room===rooms-1){
+        replaced=course.obstacles.length-1;
+        course.obstacles[replaced].floor.kind='solid';
+      }
+      if(replaced!==-1)course.obstacles.splice(replaced,1);
+      else course.retrySpikes.banks.length=0;
+    }
+    if(course.retrySpikes.banks.length)course.obstacles.push({kind:'retrySpikes'});
+  }
+  const surpriseKind=surpriseForLevel(n);
+  const surpriseRoom=mix(n*37)%rooms;
+  if(surpriseKind && room===surpriseRoom){
+    const replacement=course.obstacles.findLastIndex(trap=>!['retrySpikes','blink','cliff','crumble'].includes(trap.kind));
+    if(fixed || replacement!==-1){
+      configureSurprise(course,n,room,attempt,seed,surpriseKind);
+      if(course.surprise){
+        if(!fixed)course.obstacles.splice(replacement,1);
+        course.obstacles.push({kind:surpriseKind});
+      }
+    }
+  }
   return course;
 }
 function waterAt(x,y) {

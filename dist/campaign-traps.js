@@ -37,18 +37,18 @@ function campaignTrapCeiling(course, x, y) {
 
 const campaignBlockingKinds = new Set(['crumble', 'cliff', 'blink']);
 
-function configureCampaignTraps(course, count, stageRank, seed, {fixed, signature} = {}) {
+function configureCampaignTraps(course, count, stageRank, seed, {fixed, signature, signatureFloor} = {}) {
   const rank = Math.max(0, Math.min(9, stageRank));
   const floors = course.floors.slice(1, -1);
   const used = new Set();
   const taskMarkers = course.task ? [...course.task.items, course.task.target].filter(Boolean) : [];
   const centerOf = floor => floor.x + floor.w / 2;
   const zoneAt = x => course.zones?.find(zone => x >= zone.x && x < zone.end);
-  const canBreak = floor => floor.kind === 'solid' && !taskMarkers.some(marker =>
+  const canBreak = floor => floor.kind === 'solid' && floor.form !== 'boat' && !taskMarkers.some(marker =>
     Math.abs(marker.x - centerOf(floor)) < floor.w / 2 && Math.abs(marker.y - floor.y) < 22);
   const assignments = Array.from({length:count}, (_, i) => floors[Math.floor((i + .5) * floors.length / count)]);
   const themeTrap = signature || campaignThemeTraps[course.theme?.[5]];
-  const preferred = floors.find(floor => {
+  const preferred = course.floors[signatureFloor] ?? floors.find(floor => {
     if (campaignBlockingKinds.has(themeTrap)) return canBreak(floor);
     if (themeTrap === 'crusher') return campaignTrapCeiling(course, centerOf(floor), floor.y) !== undefined;
     if (themeTrap === 'fish' || themeTrap === 'mine') {
