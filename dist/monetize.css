@@ -1,0 +1,253 @@
+.monetization-dialog {
+  padding: 0;
+  width: min(30rem, calc(100% - 1.5rem));
+  max-height: calc(100vh - 1.5rem);
+  max-height: calc(100dvh - 1.5rem);
+  overflow: auto;
+  border: 1px solid var(--frame);
+  border-top: 4px solid var(--orange);
+  border-radius: 10px;
+  background: var(--shade);
+  color: var(--paper);
+  box-shadow: 0 5px 0 #100f0b, 0 20px 65px #0a0806b0;
+}
+
+.monetization-dialog::backdrop {
+  background: #100d08cf;
+}
+
+.monetization-sheet {
+  display: grid;
+  gap: 16px;
+  padding: clamp(16px, 5vw, 25px);
+}
+
+.monetization-heading {
+  margin: 0;
+  font-size: clamp(1.6rem, 6vw, 2.25rem);
+  line-height: 1;
+  letter-spacing: -.04em;
+}
+
+.monetization-heading:focus {
+  outline: none;
+}
+
+.monetization-context,
+.monetization-detail,
+.monetization-caption,
+.monetization-status,
+.monetization-price {
+  margin: 0;
+}
+
+.monetization-context,
+.monetization-caption {
+  color: var(--muted);
+  font: 700 .875rem/1.4 var(--mono);
+}
+
+.monetization-detail,
+.monetization-status {
+  color: var(--paper);
+  line-height: 1.45;
+}
+
+.monetization-status:empty {
+  display: none;
+}
+
+.monetization-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.monetization-stat {
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--panel);
+}
+
+.monetization-stat dt {
+  color: var(--muted);
+  font: 700 .875rem var(--mono);
+}
+
+.monetization-stat dd {
+  margin: 3px 0 0;
+  color: var(--amber);
+  font: 800 1.3rem var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.monetization-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.monetization-button {
+  min-height: 44px;
+}
+
+.monetization-dialog .monetization-primary,
+.monetization-dialog button[aria-pressed="true"] {
+  border-color: var(--amber);
+  background: var(--amber);
+  color: var(--ink);
+}
+
+.monetization-dialog button:disabled {
+  opacity: .65;
+  cursor: wait;
+}
+
+.monetization-privacy {
+  margin-left: auto;
+  padding: 10px 2px;
+  color: var(--muted);
+  font-size: .875rem;
+}
+
+.monetization-share {
+  width: 100%;
+  padding: 10px;
+  resize: vertical;
+  border: 1px solid var(--frame);
+  border-radius: 5px;
+  background: var(--ink);
+  color: var(--paper);
+  font: inherit;
+}
+
+.monetization-ad:not([hidden]) {
+  display: block;
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.monetization-ad .stage-ad-label {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font: 700 .875rem/1.4 var(--mono);
+}
+
+.monetization-price {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 5px 10px;
+  color: var(--amber);
+  font: 800 1.4rem var(--mono);
+}
+
+.monetization-price span {
+  color: var(--muted);
+  font: 650 .875rem system-ui, sans-serif;
+}
+
+.monetization-supporter-content {
+  display: grid;
+  gap: 12px;
+}
+
+.monetization-choices {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.monetization-choices legend {
+  padding: 0 0 8px;
+  color: var(--paper);
+  font-weight: 700;
+}
+
+.monetization-costumes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(66px, 1fr));
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.monetization-costume {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 9px;
+  min-height: 77px;
+  padding: 10px 5px;
+  border: 1px solid var(--frame);
+  border-radius: 5px;
+  background: var(--panel);
+  color: var(--paper);
+  font: 700 .875rem/1.1 system-ui, sans-serif;
+}
+
+.monetization-avatar {
+  --pixel-body: #ffce61;
+  --pixel-light: #fff2b5;
+  --pixel-eye: #211729;
+  position: relative;
+  width: 24px;
+  height: 24px;
+  border-top: 4px solid var(--pixel-light);
+  background: var(--pixel-body);
+  box-shadow: inset 0 -4px #2716095e;
+}
+
+.monetization-avatar::before,
+.monetization-avatar::after {
+  position: absolute;
+  content: "";
+}
+
+.monetization-avatar::before {
+  top: 5px;
+  left: 6px;
+  width: 3px;
+  height: 5px;
+  background: var(--pixel-eye);
+  box-shadow: 8px 0 var(--pixel-eye);
+}
+
+.monetization-avatar-golden {
+  --pixel-body: #ffb638;
+  --pixel-light: #fff0a0;
+}
+
+.monetization-avatar-fish {
+  --pixel-body: #47b8c6;
+  --pixel-light: #a9f4ef;
+}
+
+.monetization-avatar-fish::after {
+  top: 10px;
+  left: -6px;
+  width: 8px;
+  height: 8px;
+  background: #458ec4;
+}
+
+.monetization-avatar-apple {
+  --pixel-body: #e75d56;
+  --pixel-light: #ffa692;
+}
+
+.monetization-avatar-apple::after {
+  top: -8px;
+  left: 10px;
+  width: 8px;
+  height: 4px;
+  background: #8caf50;
+}

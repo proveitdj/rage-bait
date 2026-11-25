@@ -21,8 +21,10 @@ const keys = new Set();
 const pointers = new Map();
 let jumpBuffer = 0;
 let attempt = 0;
-const store = () => {
-  try { localStorage.setItem('rage-bait-v1',JSON.stringify({unlocked,index,deaths})); }
+let dailyRun = null, campaignState;
+const store = (selected = index) => {
+  if(dailyRun)return;
+  try { localStorage.setItem('rage-bait-v1',JSON.stringify({unlocked,index:selected,deaths})); }
   catch {}
 };
 function tone(frequency) {
@@ -42,6 +44,7 @@ function platform(x,y,w,kind='solid',options={}) {
 function updateMenus() {
   const menu = $('stages');
   menu.replaceChildren();
+  if(dailyRun)return;
   counts.forEach((count,s)=>{
     const button = document.createElement('button');
     const available = offsets[s]<=unlocked;
@@ -75,20 +78,32 @@ function showLedgeProgress(count) {
   meter.max=world.levelLedges;
   meter.value=count;
 }
+function paintRoomHud(status) {
+  $('status').textContent=status;
+  $('dangers').textContent=world.levelDangers+' THREATS';
+  showLedgeProgress(won?world.levelLedges:world.ledgeOffset+world.ledgeReached);
+  $('level').textContent=(dailyRun?'DAILY CHALLENGE':'LEVEL '+String(level+1).padStart(2,'0')+' / '+counts[stage])
+    +(world.rooms>1?' · ROOM '+(world.room+1)+' / '+world.rooms:'');
+  $('title').textContent=world.scene.title;
+  $('stage').textContent=dailyRun?dailyRun.challenge.date+' · DAILY RAGE BAIT'
+    :'STAGE '+String(stage+1).padStart(2,'0')+' / '+world.scene.setting.toUpperCase();
+}
+function paintRunHud() {
+  $('progress').textContent=dailyRun?formatDailyTime(dailyRun.ticks):unlocked+' / '+total+' CLEARED';
+  $('deaths').textContent='× '+(dailyRun?dailyRun.deaths:deaths)+' DEATHS';
+  $('daily').setAttribute('aria-pressed',String(Boolean(dailyRun)));
+  $('campaign').setAttribute('aria-pressed',String(!dailyRun));
+  $('campaign-panel').hidden=Boolean(dailyRun);
+}
 function enterRoom(room) {
   world=makeEncounter(stage,level,room,attempt);
   player={...world.spawn,vx:0,vy:0,scale:1,ground:world.floors[0],coyote:6,
     face:Math.sign(world.floors[1].x-world.spawn.x)||1,stroke:0};
   ticks=0;delay=0;outcome='';won=false;jumpBuffer=0;
-  $('status').textContent=gimmickHint(world)||(world.reverse?'Left and right are swapped. ':'')
-    +(world.task?.title || (world.zones.length?'Space swims. Reach the exit.':'Reach the exit.'));
-  $('dangers').textContent=world.levelDangers+' THREATS';
   world.ledgeReached=0;
-  showLedgeProgress(world.ledgeOffset);
-  $('level').textContent='LEVEL '+String(level+1).padStart(2,'0')+' / '+counts[stage]
-    +(world.rooms>1?' · ROOM '+(room+1)+' / '+world.rooms:'');
-  $('title').textContent=world.scene.title;
-  $('stage').textContent='STAGE '+String(stage+1).padStart(2,'0')+' / '+world.scene.setting.toUpperCase();
+  const hint=gimmickHint(world)||(world.reverse?'Left and right are swapped. ':'')
+    +(world.task?.title || (world.zones.length?'Space swims. Reach the exit.':'Reach the exit.'));
+  paintRoomHud(hint);
 }
 function start(next, refresh=true, retry=false) {
   attempt=retry?attempt+1:0;
@@ -96,17 +111,53 @@ function start(next, refresh=true, retry=false) {
   stage=offsets.findLastIndex(offset=>index>=offset);
   level=index-offsets[stage];
   enterRoom(0);
-  if(!refresh) return;
+  if(!refresh)return;
   expanded=stage;
-  $('progress').textContent=unlocked+' / '+total+' CLEARED';
-  $('deaths').textContent='× '+deaths+' DEATHS';
+  paintRunHud();
   store();
   updateMenus();
 }
+function setChallengeUrl(date) {
+  if(!window.location || !window.history)return;
+  const url=new URL(window.location.href);
+  if(date)url.searchParams.set('challenge',date);
+  else url.searchParams.delete('challenge');
+  window.history.replaceState(null,'',url.href);
+}
+function beginDaily(challenge=dailyChallenge()) {
+  if(!challenge)return;
+  if(!dailyRun){
+    campaignState={index,stage,level,world,player,ticks,delay,outcome,expanded,won,attempt,
+      status:$('status').textContent};
+  }
+  dailyRun={challenge,ticks:0,deaths:0,started:false};
+  clearInputs();
+  start(challenge.index);
+  setChallengeUrl(challenge.date);
+}
+function leaveDaily() {
+  if(!dailyRun || !campaignState)return;
+  dailyRun=null;
+  const {status,...state}=campaignState;
+  ({index,stage,level,world,player,ticks,delay,outcome,expanded,won,attempt}=state);
+  campaignState=null;
+  clearInputs();
+  paintRoomHud(status);
+  paintRunHud();
+  updateMenus();
+  setChallengeUrl(null);
+}
+function restartGame() {
+  if(dailyRun)beginDaily(dailyRun.challenge);
+  else start(index,true,true);
+}
 function die(reason) {
-  deaths++;
-  store();
-  $('deaths').textContent='× '+deaths+' DEATHS';
+  if(dailyRun)dailyRun.deaths++;
+  else{
+    deaths++;
+    store();
+  }
+  $('deaths').textContent='× '+(dailyRun?dailyRun.deaths:deaths)+' DEATHS';
   $('status').textContent=reason || 'Ouch. Going again…';
   tone(90);
   outcome='death';delay=25;
@@ -118,15 +169,34 @@ function clear() {
     return;
   }
   showLedgeProgress(world.levelLedges);
-  unlocked=Math.max(unlocked,index+1);
-  store();
-  $('progress').textContent=unlocked+' / '+total+' CLEARED';
   tone(660);
+  if(dailyRun){
+    const {challenge,ticks:elapsed,deaths:runDeaths}=dailyRun;
+    outcome='daily-complete';
+    paintRunHud();
+    $('status').textContent='Daily challenge cleared';
+    clearInputs();
+    showDailyResult({date:challenge.date,title:world.scene.title,ticks:elapsed,deaths:runDeaths,
+      retry:()=>beginDaily(challenge),back:leaveDaily});
+    return;
+  }
+  const firstClear=index>=unlocked;
+  unlocked=Math.max(unlocked,index+1);
+  $('progress').textContent=unlocked+' / '+total+' CLEARED';
   if(index===total-1){
+    store();
     won=true;
     $('status').textContent='All '+total+' levels cleared!';
     updateMenus();
+  }else if(firstClear && level===counts[stage]-1){
+    const next=index+1;
+    outcome='intermission';
+    $('status').textContent='Stage cleared';
+    store(next);
+    clearInputs();
+    showStageResults({stage:stage+1,title:names[stage],levels:counts[stage],deaths,next:()=>start(next)});
   }else{
+    store();
     $('status').textContent='Level cleared';
     outcome='clear';delay=38;
   }
@@ -148,7 +218,15 @@ function active(p) {
   return !p.gone && gimmickSolidActive(p) && (p.kind!=='timed'||(ticks+p.phase)%p.period < p.period-57);
 }
 function step() {
-  if(won)return;
+  if(won || outcome==='daily-complete' || outcome==='intermission' || monetizationDialogOpen())return;
+  if(dailyRun){
+    if(!dailyRun.started){
+      if(!keys.size && !pointers.size && jumpBuffer===0)return;
+      dailyRun.started=true;
+    }
+    dailyRun.ticks++;
+    if(dailyRun.ticks%6===0)$('progress').textContent=formatDailyTime(dailyRun.ticks);
+  }
   if(delay){
     if(--delay===0) {
       if(outcome==='clear') start(index+1);
@@ -311,19 +389,37 @@ function drawPlayfield(){
     ctx.save();
     ctx.translate(x,y);
     ctx.scale(player.scale,player.scale);
-    rect(-10,-24,20,19,'#ffce61');
-    rect(-10,-24,20,3,'#fff2b5');
-    rect(-10,-8,20,3,'#c67741');
+    const skin=supporterStyle().skin;
+    const [coat,highlight,shadow]={
+      golden:['#ffd95c','#fff5ab','#c48525'],
+      fish:['#6ad6cf','#b1f7ef','#318d96'],
+      apple:['#f27277','#ffb3a2','#ad3d55'],
+      classic:['#ffce61','#fff2b5','#c67741']
+    }[skin];
+    rect(-10,-24,20,19,coat);
+    rect(-10,-24,20,3,highlight);
+    rect(-10,-8,20,3,shadow);
+    if(skin==='fish')rect(-face*13-2,-20,4,9,coat);
+    if(skin==='apple'){
+      rect(-1,-29,3,5,'#82523e');
+      rect(2,-30,5,3,'#8edf87');
+    }
+    if(skin==='golden')rect(-8,-15,3,3,'#fff5ab');
     rect(face*3-4,-17,3,4,'#211729');
     rect(face*3+2,-17,3,4,'#211729');
-    rect(-9,-5,6,5-stride/2,'#ffce61');
-    rect(3,-5,6,3+stride/2,'#ffce61');
+    rect(-9,-5,6,5-stride/2,coat);
+    rect(3,-5,6,3+stride/2,coat);
     ctx.restore();
   }else{
     for(let i=0;i<9;i++){
       const angle=i*Math.PI*2/9;
       const radius=(26-delay)*1.8;
-      rect(player.x+Math.cos(angle)*radius,Math.min(player.y-15,417)+Math.sin(angle)*radius,4,4,'#ff748e');
+      const x=player.x+Math.cos(angle)*radius;
+      const y=Math.min(player.y-15,417)+Math.sin(angle)*radius;
+      if(supporterStyle().death==='apples'){
+        rect(x,y,6,5,'#ff657c');
+        rect(x+3,y-2,2,2,'#92db7a');
+      }else rect(x,y,4,4,'#ff748e');
     }
   }
   drawAnthologyForeground();
@@ -337,9 +433,10 @@ function drawPlayfield(){
 }
 const bindings={KeyA:'left',ArrowLeft:'left',KeyD:'right',ArrowRight:'right',Space:'jump',ArrowUp:'jump',KeyW:'jump'};
 document.addEventListener('keydown',e=>{
+  if(monetizationDialogOpen())return;
   const action=bindings[e.code];
   const interactive=e.target instanceof HTMLButtonElement;
-  if(e.code==='KeyR'&&!e.repeat){start(index,true,true);return;}
+  if(e.code==='KeyR'&&!e.repeat){restartGame();return;}
   if(!action || (interactive&&e.code==='Space'))return;
   e.preventDefault();
   if(action==='jump'){
@@ -416,7 +513,13 @@ document.addEventListener('fullscreenchange',syncFullscreenButton);
 document.addEventListener('keydown',e=>{
   if(e.code==='Escape'&&playArea.classList.contains('is-expanded'))expandGame(false);
 });
-$('restart').onclick=()=>{start(index,true,true);canvas.focus();};
+$('restart').onclick=()=>{restartGame();canvas.focus();};
+$('daily').onclick=()=>{
+  const today=dailyChallenge();
+  if(dailyRun?.challenge.date!==today?.date)beginDaily(today);
+  canvas.focus();
+};
+$('campaign').onclick=()=>{leaveDaily();canvas.focus();};
 $('sound').onclick=()=>{
   muted=!muted;
   if(!muted){
@@ -428,6 +531,9 @@ $('sound').onclick=()=>{
   canvas.focus();
 };
 start(index);
+const sharedDaily=dailyFromLink();
+if(sharedDaily)beginDaily(sharedDaily);
+initializeStageAds();
 let previous=0, elapsed=0;
 function frame(now){
   if(previous)elapsed+=Math.min(now-previous,50);

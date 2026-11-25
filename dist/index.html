@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="description" content="Rage Bait, a trap-filled arcade platformer with unlimited retries.">
   <title>Rage Bait</title>
+  <link rel="stylesheet" href="monetize.css">
   <style>
     :root {
       color-scheme: dark;
@@ -125,6 +126,13 @@
       font: 700 .875rem var(--mono);
       white-space: nowrap;
     }
+    .play-modes { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+    .play-modes > div { display: flex; gap: 8px; flex-wrap: wrap; }
+    .play-modes .button[aria-pressed="true"] { color: var(--ink); background: var(--amber); border-color: var(--orange); }
+    @media (pointer: coarse) { .play-modes .button { min-height: 48px; } }
+    .site-footer { display:flex; gap:16px; flex-wrap:wrap; align-items:center; margin-top:24px; color:var(--muted); font-size:.875rem; }
+    .site-footer a { color:var(--amber); }
+    .layout:has(#campaign-panel[hidden]) { grid-template-columns: minmax(0, 1fr); max-width: 920px; }
     .layout {
       display: grid;
       grid-template-columns: minmax(0, 1fr) 256px;
@@ -389,6 +397,13 @@
     </div>
   </header>
   <main>
+    <nav class="play-modes" aria-label="Game mode">
+      <div>
+        <button type="button" class="button" id="campaign" aria-pressed="true">Campaign</button>
+        <button type="button" class="button" id="daily" aria-pressed="false">Daily challenge</button>
+      </div>
+      <button type="button" class="button" id="supporter">Supporter</button>
+    </nav>
     <div class="title-row">
       <div>
         <div id="stage" class="stage"></div>
@@ -432,10 +447,14 @@
           </div>
         </div>
       </div>
-      <aside class="panel" aria-labelledby="stages-heading">
+      <aside id="campaign-panel" class="panel" aria-labelledby="stages-heading">
         <h2 id="stages-heading">Stages</h2>
         <div class="stages" id="stages"></div>
       </aside>
     </div>
+    <footer class="site-footer">
+      <a href="/privacy">Privacy</a>
+      <button type="button" class="button" id="ad-privacy" hidden>Privacy and cookie settings</button>
+    </footer>
   </main>
-  <script src="anthology-intro.js"></script><script src="anthology-a.js"></script><script src="anthology-b.js"></script><script src="endurance-routes.js"></script><script src="encounters.js"></script><script src="campaign-traps.js"></script><script src="objectives.js"></script><script src="anthology-art.js"></script><script src="retry-spikes.js"></script><script src="landforms.js"></script><script src="surprise-hazards.js"></script><script src="extra-hazards.js"></script><script src="gimmick-routes.js"></script><script src="gimmicks.js"></script><script src="game.js"></script></body></html>
+  <script src="anthology-intro.js"></script><script src="anthology-a.js"></script><script src="anthology-b.js"></script><script src="endurance-routes.js"></script><script src="encounters.js"></script><script src="campaign-traps.js"></script><script src="objectives.js"></script><script src="anthology-art.js"></script><script src="retry-spikes.js"></script><script src="landforms.js"></script><script src="surprise-hazards.js"></script><script src="extra-hazards.js"></script><script src="gimmick-routes.js"></script><script src="gimmicks.js"></script><script src="daily.js"></script><script src="stage-ads.js"></script><script src="monetize-ui.js"></script><script src="game.js"></script></body></html>
