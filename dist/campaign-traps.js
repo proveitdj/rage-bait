@@ -41,7 +41,7 @@ function configureCampaignTraps(course, count, stageRank, seed, {fixed, signatur
   const rank = Math.max(0, Math.min(9, stageRank));
   const floors = course.floors.slice(1, -1);
   const used = new Set();
-  const taskMarkers = course.task ? [...course.task.items, course.task.target].filter(Boolean) : [];
+  const taskMarkers = [...course.task?.items || [],course.task?.target,...(course.puzzlePoints||[])].filter(Boolean);
   const centerOf = floor => floor.x + floor.w / 2;
   const zoneAt = x => course.zones?.find(zone => x >= zone.x && x < zone.end);
   const canBreak = floor => floor.kind === 'solid' && floor.form !== 'boat' && !taskMarkers.some(marker =>
@@ -184,8 +184,8 @@ function campaignTrapHit() {
   for (const trap of world.obstacles) {
     if (!(trap.kind in trapMessages)) continue;
     const spot = campaignTrapFrame(trap, ticks);
-    if (spot && !spot.warning && Math.abs(player.x - spot.x) < spot.w / 2 + 7 &&
-      player.y > spot.y && player.y - 21 < spot.y + spot.h) {
+    if (spot && !spot.warning && Math.abs(player.x - spot.x) < spot.w / 2 + playerHalfWidth() - 1 &&
+      player.y > spot.y && player.y - playerHeight() + 1 < spot.y + spot.h) {
       return trapMessages[trap.kind];
     }
   }

@@ -77,10 +77,10 @@ function showLedgeProgress(count) {
 }
 function enterRoom(room) {
   world=makeEncounter(stage,level,room,attempt);
-  player={...world.spawn,vx:0,vy:0,ground:world.floors[0],coyote:6,
+  player={...world.spawn,vx:0,vy:0,scale:1,ground:world.floors[0],coyote:6,
     face:Math.sign(world.floors[1].x-world.spawn.x)||1,stroke:0};
   ticks=0;delay=0;outcome='';won=false;jumpBuffer=0;
-  $('status').textContent=(world.reverse?'Left and right are swapped. ':'')
+  $('status').textContent=gimmickHint(world)||(world.reverse?'Left and right are swapped. ':'')
     +(world.task?.title || (world.zones.length?'Space swims. Reach the exit.':'Reach the exit.'));
   $('dangers').textContent=world.levelDangers+' THREATS';
   world.ledgeReached=0;
@@ -131,8 +131,21 @@ function clear() {
     outcome='clear';delay=38;
   }
 }
+function playerHalfWidth() {
+  return 8*player.scale;
+}
+function playerHeight() {
+  return 22*player.scale;
+}
+function solidOverlaps(solid,x,y,halfWidth,height) {
+  return gimmickSolidActive(solid) && x+halfWidth>solid.x && x-halfWidth<solid.x+solid.w &&
+    y>solid.y && y-height<solid.y+solid.h;
+}
+function canFitPlayer(scale) {
+  return !world.solids.some(solid=>solidOverlaps(solid,player.x,player.y,8*scale,22*scale));
+}
 function active(p) {
-  return !p.gone && (p.kind!=='timed'||(ticks+p.phase)%p.period < p.period-57);
+  return !p.gone && gimmickSolidActive(p) && (p.kind!=='timed'||(ticks+p.phase)%p.period < p.period-57);
 }
 function step() {
   if(won)return;
@@ -169,9 +182,10 @@ function step() {
   if(world.wind && !wet && !player.ground)player.vx+=windAt(ticks);
   if(direction)player.face=direction;
   const nextX=Math.max(12,Math.min(852,player.x+player.vx));
-  const blocked=world.solids.some(b=>nextX+8>b.x && nextX-8<b.x+b.w && player.y>b.y && player.y-22<b.y+b.h);
+  const halfWidth=playerHalfWidth(), height=playerHeight();
+  const blocked=world.solids.some(solid=>solidOverlaps(solid,nextX,player.y,halfWidth,height));
   if(!blocked)player.x=nextX;
-  if(player.ground && (player.x+8<=player.ground.x || player.x-8>=player.ground.x+player.ground.w)) player.ground=null;
+  if(player.ground && (player.x+halfWidth<=player.ground.x || player.x-halfWidth>=player.ground.x+player.ground.w)) player.ground=null;
   player.coyote=player.ground?6:Math.max(0,player.coyote-1);
   player.stroke=Math.max(0,player.stroke-1);
   if(jumpBuffer>0 && (player.coyote>0 || wet && player.stroke===0)){
@@ -185,11 +199,14 @@ function step() {
     player.vy=Math.min(wet?3.9:16,player.vy+(wet?.36:.53));
     player.y+=player.vy;
     if(player.vy<0){
-      const ceiling=world.solids.find(b=>player.x+8>b.x && player.x-8<b.x+b.w && oldY-22>=b.y+b.h && player.y-22<b.y+b.h);
-      if(ceiling){player.y=ceiling.y+ceiling.h+22;player.vy=0;}
+      const ceiling=world.solids.find(b=>gimmickSolidActive(b) &&
+        player.x+halfWidth>b.x && player.x-halfWidth<b.x+b.w &&
+        oldY-height>=b.y+b.h && player.y-height<b.y+b.h);
+      if(ceiling){player.y=ceiling.y+ceiling.h+height;player.vy=0;}
+      gimmickHeadbutt(oldY-height,player.y-height,halfWidth);
     }
     if(player.vy>=0){
-      const landing=world.supports.filter(p=>active(p)&&oldY<=p.y&&player.y>=p.y&&player.x+8>p.x&&player.x-8<p.x+p.w).sort((a,b)=>a.y-b.y)[0];
+      const landing=world.supports.filter(p=>active(p)&&oldY<=p.y&&player.y>=p.y&&player.x+halfWidth>p.x&&player.x-halfWidth<p.x+p.w).sort((a,b)=>a.y-b.y)[0];
       if(landing){
         player.y=landing.y;player.vy=0;player.ground=landing;
         if(landing.routeIndex>world.ledgeReached){
@@ -200,10 +217,11 @@ function step() {
       }
     }
   }
+  updateGimmick();
   updateObjective();
-  const reason=extraHazardHit() || surpriseHit() || retrySpikeHit() || campaignTrapHit();
+  const reason=gimmickHit() || extraHazardHit() || surpriseHit() || retrySpikeHit() || campaignTrapHit();
   if(reason){die(reason);return;}
-  if(Math.abs(player.x-world.exit.x)<17 && Math.abs(player.y-world.exit.y)<24 && taskOpen(world)){clear();return;}
+  if(Math.abs(player.x-world.exit.x)<17 && Math.abs(player.y-world.exit.y)<24 && taskOpen(world) && gimmickExitOpen(world)){clear();return;}
   if(player.y>442)die();
 }
 
@@ -235,6 +253,7 @@ function drawPlayfield(){
   for(let i=0;i<38;i++)rect((i*47+ticks*.6)%864,415+(i*13)%42,4+(i%4)*3,1,'#ff54864d');
 
   for(const p of world.floors){
+    if(gimmickFloorHidden(p))continue;
     if(!active(p)){
       if(!p.gone)rect(p.x,p.y,p.w,2,'#8c77a54d');
       if(p.kind==='cliff' && p.gone){
@@ -265,33 +284,41 @@ function drawPlayfield(){
   }
 
   for(const b of world.solids){
+    if(!gimmickSolidActive(b))continue;
     rect(b.x,b.y,b.w,b.h,world.scene.ink);
     rect(b.x,b.y,b.w,3,world.scene.accent);
     rect(b.x,b.y+b.h-3,b.w,3,'#111019');
     for(let x=10;x<b.w-9;x+=25)rect(b.x+x,b.y+b.h-9,9,3,'#ffffff30');
   }
-  const exit=world.exit, open=taskOpen(world);
+  const exit=gimmickDoor(world);
+  const falseDoor=world.gimmick?.type==='switch'&&!gimmickExitOpen(world);
+  const open=falseDoor||taskOpen(world)&&gimmickExitOpen(world);
   const glow=ctx.createRadialGradient(exit.x,exit.y-20,4,exit.x,exit.y-20,46);
   glow.addColorStop(0,open?'#ccff4870':'#ffc46b50');
   glow.addColorStop(1,'#00000000');
   rect(exit.x-46,exit.y-66,92,92,glow);
-  drawDoor(exit.x,exit.y,open);
+  drawDoor(exit.x,exit.y,open,world.gimmick?.type==='switch');
   drawCampaignTraps();
   drawRetrySpikes();
   drawSurprise();
   drawExtraHazards();
+  drawGimmick();
   drawObjective();
 
   if(outcome!=='death'){
     const {x,y,face}=player;
     const stride=player.ground&&player.vx ? Math.floor(ticks/4)%2*4 : 0;
-    rect(x-10,y-24,20,19,'#ffce61');
-    rect(x-10,y-24,20,3,'#fff2b5');
-    rect(x-10,y-8,20,3,'#c67741');
-    rect(x+face*3-4,y-17,3,4,'#211729');
-    rect(x+face*3+2,y-17,3,4,'#211729');
-    rect(x-9,y-5,6,5-stride/2,'#ffce61');
-    rect(x+3,y-5,6,3+stride/2,'#ffce61');
+    ctx.save();
+    ctx.translate(x,y);
+    ctx.scale(player.scale,player.scale);
+    rect(-10,-24,20,19,'#ffce61');
+    rect(-10,-24,20,3,'#fff2b5');
+    rect(-10,-8,20,3,'#c67741');
+    rect(face*3-4,-17,3,4,'#211729');
+    rect(face*3+2,-17,3,4,'#211729');
+    rect(-9,-5,6,5-stride/2,'#ffce61');
+    rect(3,-5,6,3+stride/2,'#ffce61');
+    ctx.restore();
   }else{
     for(let i=0;i<9;i++){
       const angle=i*Math.PI*2/9;
@@ -329,22 +356,66 @@ document.addEventListener('keyup',e=>{
 });
 const pressed=new Set();
 document.addEventListener('keydown', e=>pressed.add(e.code));
-window.addEventListener('blur',()=>{keys.clear();pressed.clear();pointers.clear();jumpBuffer=0;});
+function clearInputs() {
+  keys.clear();
+  pressed.clear();
+  pointers.clear();
+  jumpBuffer=0;
+}
+window.addEventListener('blur',clearInputs);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)clearInputs();});
+for(const event of ['pointerup','pointercancel']){
+  document.addEventListener(event,e=>pointers.delete(e.pointerId));
+}
 for(const action of ['left','right','jump']){
   const button=$(action);
   button.addEventListener('pointerdown',e=>{
     e.preventDefault();
-    button.setPointerCapture(e.pointerId);
+    button.setPointerCapture?.(e.pointerId);
     if(action==='jump')jumpBuffer=7;
     else pointers.set(e.pointerId,action);
   });
   for(const event of ['pointerup','pointercancel','lostpointercapture']){
     button.addEventListener(event,e=>pointers.delete(e.pointerId));
   }
+  button.addEventListener('contextmenu',e=>e.preventDefault());
   button.addEventListener('click',e=>{
     if(e.detail===0&&action==='jump')jumpBuffer=7;
   });
 }
+const playArea=$('play-area'), fullscreen=$('fullscreen');
+function syncFullscreenButton() {
+  const expanded=document.fullscreenElement===playArea || playArea.classList.contains('is-expanded');
+  fullscreen.setAttribute('aria-pressed',String(expanded));
+  fullscreen.textContent=expanded?'Exit full screen':'Full screen';
+}
+function expandGame(expanded) {
+  playArea.classList.toggle('is-expanded',expanded);
+  document.body.classList.toggle('play-expanded',expanded);
+  syncFullscreenButton();
+}
+fullscreen.onclick=async()=>{
+  if(document.fullscreenElement===playArea){
+    await document.exitFullscreen();
+    return;
+  }
+  if(playArea.classList.contains('is-expanded')){
+    expandGame(false);
+    return;
+  }
+  if(typeof playArea.requestFullscreen==='function'){
+    try {
+      await playArea.requestFullscreen();
+      syncFullscreenButton();
+      return;
+    }catch {}
+  }
+  expandGame(true);
+};
+document.addEventListener('fullscreenchange',syncFullscreenButton);
+document.addEventListener('keydown',e=>{
+  if(e.code==='Escape'&&playArea.classList.contains('is-expanded'))expandGame(false);
+});
 $('restart').onclick=()=>{start(index,true,true);canvas.focus();};
 $('sound').onclick=()=>{
   muted=!muted;

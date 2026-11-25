@@ -185,6 +185,12 @@ function makeRoomTask(kind,labels,length,seed) {
     items:labels.map((label,i)=>[labels.length===1?Math.ceil(last/2):1+Math.round(i*(last-1)/(labels.length-1)),label])
   };
 }
+function gimmickForRoom(n,room) {
+  if(room!==1)return null;
+  if(n<10)return {3:'memory',5:'switch',6:'size'}[n]||null;
+  const choice=mix(n*41+7);
+  return choice%5===0?['memory','switch','size'][(choice>>>11)%3]:null;
+}
 function makeEncounter(s,l,room,attempt=0) {
   const n=offsets[s]+l;
   const seed=mix(n*19+room);
@@ -194,13 +200,15 @@ function makeEncounter(s,l,room,attempt=0) {
   const baseDangers=baseDangerCount(n);
   const levelDangers=levelDangerCount(n);
   const surpriseKind=surpriseForLevel(n);
-  const surpriseRoom=n<10?0:1+mix(n*37)%(rooms-1);
+  const puzzleType=gimmickForRoom(n,room);
+  const chosenSurprise=n<10?0:1+mix(n*37)%(rooms-1);
+  const surpriseRoom=gimmickForRoom(n,chosenSurprise)?(chosenSurprise+1)%rooms:chosenSurprise;
   const wantsSurprise=surpriseKind && room===surpriseRoom;
   const intro=n<10?anthologyIntro[n]:null;
   const opening=intro?intro.traps.length+1+Number(Boolean(surpriseKind)):3;
   const roomDangers=sectionDangerCount(baseDangers,rooms,room,opening);
   const rank=room===0?s:Math.min(9,s+Math.floor(l*2/counts[s])+Math.floor(room/2));
-  let scene, path, blocks, zones, task, rules, fixed, signature, signatureFloor, forms;
+  let scene, path, blocks, zones, task, rules, fixed, signature, signatureFloor, forms, puzzle;
   if(intro){
     const {title,setting,art,sky,ink,accent}=intro;
     scene={title,setting,art,sky,ink,accent,seed};
@@ -209,8 +217,9 @@ function makeEncounter(s,l,room,attempt=0) {
     scene=levelScene(title,setting,art,seed);
   }
   if(room>0){
-    ({path,forms,blocks,zones,signature,signatureFloor}=enduranceRoute(plan[room],seed,rank));
-    rules={ice:scene.art==='ice'&&room%2===0,wind:scene.art==='storm'&&room%2===1};
+    const section=puzzleType?gimmickRoute(puzzleType,plan[room],seed):enduranceRoute(plan[room],seed,rank);
+    ({path,forms,blocks,zones,signature,signatureFloor,puzzle}=section);
+    rules={ice:!puzzle&&scene.art==='ice'&&room%2===0,wind:!puzzle&&scene.art==='storm'&&room%2===1};
   }else if(intro){
     path=intro.route;blocks=intro.solids;zones=intro.zones;
     task=intro.task;rules=intro.rules||{};forms=intro.forms;
@@ -254,20 +263,26 @@ function makeEncounter(s,l,room,attempt=0) {
     phase:seed%200, ...rules
   };
   course.supports=[...floors,...course.solids];
+  if(puzzle){
+    const important=[puzzle.hidden,puzzle.decoy,...(puzzle.pads||[]).map(([i])=>i)].filter(Number.isInteger);
+    course.puzzlePoints=important.map(i=>center(floors[i]));
+    if(puzzle.button)course.puzzlePoints.push({x:puzzle.button.x+puzzle.button.w/2,y:puzzle.button.y+32});
+    configureGimmick(course,puzzle);
+  }
   configureCampaignTraps(course,fixed?.length??roomDangers,rank,seed,{fixed,signature,signatureFloor});
   if(wantsSurprise){
     configureSurprise(course,n,room,attempt,seed,surpriseKind);
     if(course.surprise && (fixed || spendHazard(course,true)))course.obstacles.push({kind:surpriseKind});
     else course.surprise=null;
   }
-  if(room===0 || !wantsSurprise && (room+seed)%3!==0){
+  if(room===0 || !puzzle && !wantsSurprise && (room+seed)%3!==0){
     configureRetrySpikes(course,attempt,seed);
     if(course.retrySpikes.banks.length && (fixed || spendHazard(course,room===0))){
       course.obstacles.push({kind:'retrySpikes'});
     }else course.retrySpikes.banks.length=0;
   }
   const extraCount=extraDangerCount(n,s,room);
-  const wantsCliff=extraCount>=3 && ((seed>>>8)%3!==0 || extraCount===5);
+  const wantsCliff=!puzzle && extraCount>=3 && ((seed>>>8)%3!==0 || extraCount===5);
   const extraCliff=wantsCliff?prepareExtraCliff(course,rank,seed):null;
   if(extraCliff){
     course.obstacles.push(extraCliff);

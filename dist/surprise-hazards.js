@@ -5,7 +5,7 @@ function configureSurprise(course, level, room, attempt, seed, kind) {
   if (kind !== 'giantSaw' && kind !== 'lightning') return;
   const retry = Math.max(0, Math.floor(attempt || 0));
   const saw = kind === 'giantSaw';
-  const taskPoints = [...course.task?.items || [], course.task?.target].filter(Boolean);
+  const taskPoints = [...course.task?.items || [],course.task?.target,...(course.puzzlePoints||[])].filter(Boolean);
   const protectedAreas = [
     {...course.spawn, clearance:18},
     {...course.exit, clearance:26},
@@ -63,12 +63,12 @@ function surpriseHit() {
   const hazard=surpriseFrame(world,ticks);
   if (!hazard || hazard.warning) return '';
   if (hazard.kind==='lightning') {
-    if (Math.abs(player.x-hazard.x)<hazard.radius+7 && player.y>hazard.top && player.y-22<hazard.y){
+    if (Math.abs(player.x-hazard.x)<hazard.radius+playerHalfWidth()-1 && player.y>hazard.top && player.y-playerHeight()<hazard.y){
       return 'Lightning struck your landing.';
     }
   } else {
-    const dx=Math.max(0,Math.abs(player.x-hazard.x)-8);
-    const dy=Math.max(player.y-22-hazard.y,0,hazard.y-player.y);
+    const dx=Math.max(0,Math.abs(player.x-hazard.x)-playerHalfWidth());
+    const dy=Math.max(player.y-playerHeight()-hazard.y,0,hazard.y-player.y);
     if (player.y<=hazard.ground+1 && dx*dx+dy*dy<hazard.radius*hazard.radius) {
       return 'The giant saw came up under you.';
     }

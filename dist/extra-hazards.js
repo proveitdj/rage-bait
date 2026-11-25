@@ -105,8 +105,8 @@ function extraHazardFrames(course,time) {
 
 function extraHazardHit() {
   for(const frame of extraHazardFrames(world,ticks)){
-    if(!frame.warning&&Math.abs(player.x-frame.x)<frame.w/2+7&&
-      player.y>frame.y&&player.y-21<frame.y+frame.h)return extraHazardMessages[frame.kind];
+    if(!frame.warning&&Math.abs(player.x-frame.x)<frame.w/2+playerHalfWidth()-1&&
+      player.y>frame.y&&player.y-playerHeight()+1<frame.y+frame.h)return extraHazardMessages[frame.kind];
   }
   return '';
 }

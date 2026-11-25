@@ -58,8 +58,8 @@ function retrySpikeFrame(course, time) {
 
 function retrySpikeHit() {
   const bank = retrySpikeFrame(world, ticks);
-  if (bank && bank.height > 0 && Math.abs(player.x - bank.x) < bank.w / 2 + 7 &&
-    player.y > bank.y - bank.height && player.y - 21 < bank.y + 1) {
+  if (bank && bank.height > 0 && Math.abs(player.x - bank.x) < bank.w / 2 + playerHalfWidth() - 1 &&
+    player.y > bank.y - bank.height && player.y - playerHeight() + 1 < bank.y + 1) {
     return 'The spikes changed landings.';
   }
   return '';
