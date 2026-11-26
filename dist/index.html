@@ -3,12 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="description" content="Rage Bait, a trap-filled arcade platformer with unlimited retries.">
+  <meta name="description" content="Play Rage Bait, a free online troll platformer with 310 levels. Outsmart moving exits, collapsing cliffs, and shifting hazards with unlimited retries.">
+  <link rel="canonical" href="https://ragebaitgame.co.uk/">
   <script id="adsense-verification" async
     src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7271416347446804"
     crossorigin="anonymous" onload="this.dataset.loadState='loaded'"
     onerror="this.dataset.loadState='failed'"></script>
-  <title>Rage Bait</title>
+  <title>Rage Bait Game – Free Online Troll Platformer</title>
   <link rel="stylesheet" href="monetize.css">
   <style>
     :root {
@@ -108,7 +109,16 @@
       letter-spacing: .065em;
       line-height: 1.4;
     }
-    h1 {
+    .game-heading {
+      margin: 0 0 16px;
+      color: var(--paper);
+      font-size: clamp(1.125rem, 3vw, 1.7rem);
+      font-weight: 850;
+      line-height: 1.2;
+      letter-spacing: -.025em;
+      text-wrap: balance;
+    }
+    .level-title {
       margin: 0;
       color: var(--paper);
       text-wrap: balance;
@@ -134,6 +144,22 @@
     .play-modes > div { display: flex; gap: 8px; flex-wrap: wrap; }
     .play-modes .button[aria-pressed="true"] { color: var(--ink); background: var(--amber); border-color: var(--orange); }
     @media (pointer: coarse) { .play-modes .button { min-height: 48px; } }
+    .game-guide {
+      max-width: 72ch;
+      margin-top: clamp(28px, 5vw, 52px);
+      padding-top: 24px;
+      border-top: 1px solid var(--frame);
+      color: var(--paper);
+      line-height: 1.65;
+    }
+    .game-guide h2, .game-guide h3 { line-height: 1.25; text-wrap: balance; }
+    .game-guide h2 { margin: 24px 0 8px; color: var(--amber); font-size: 1.45rem; }
+    .game-guide h2:first-child { margin-top: 0; }
+    .game-guide h3 { margin: 16px 0 4px; font-size: 1.05rem; }
+    .game-guide p, .game-guide ul { margin: 0 0 12px; }
+    .game-guide ul { padding-inline-start: 1.4em; }
+    .game-guide li + li { margin-top: 6px; }
+    .game-guide kbd { font: 700 .9em var(--mono); }
     .site-footer { display:flex; gap:16px; flex-wrap:wrap; align-items:center; margin-top:24px; color:var(--muted); font-size:.875rem; }
     .site-footer a { color:var(--amber); }
     .layout:has(#campaign-panel[hidden]) { grid-template-columns: minmax(0, 1fr); max-width: 920px; }
@@ -350,6 +376,7 @@
     @media (max-width: 480px) {
       :root { --gutter: 12px; }
       .bar { min-height: 60px; }
+      .game-heading { margin-bottom: 12px; }
       .title-row { align-items: flex-start; flex-direction: column; margin-bottom: 14px; }
       .deaths { align-self: flex-start; }
       .screenbar, .screenfoot { font-size: .8125rem; gap: 6px 8px; padding-inline: 9px; }
@@ -378,7 +405,8 @@
       main { padding-top: 12px; }
       .title-row { flex-direction: row; align-items: flex-end; margin-bottom: 10px; }
       .stage { margin-bottom: 3px; font-size: .75rem; }
-      h1 { font-size: clamp(1.55rem, 4vw, 2rem); }
+      .game-heading { margin-bottom: 8px; }
+      .level-title { font-size: clamp(1.55rem, 4vw, 2rem); }
       .deaths { align-self: flex-end; padding-block: 4px; font-size: .75rem; }
       .screenbar, .screenfoot, .routebar { padding-block: 5px; }
       .screenfoot { min-height: 32px; }
@@ -401,6 +429,7 @@
     </div>
   </header>
   <main>
+    <h1 class="game-heading">Rage Bait Game – Free Online Troll Platformer</h1>
     <nav class="play-modes" aria-label="Game mode">
       <div>
         <button type="button" class="button" id="campaign" aria-pressed="true">Campaign</button>
@@ -411,7 +440,7 @@
     <div class="title-row">
       <div>
         <div id="stage" class="stage"></div>
-        <h1 id="title"></h1>
+        <h2 id="title" class="level-title"></h2>
       </div>
       <div id="deaths" class="deaths"></div>
     </div>
@@ -456,6 +485,25 @@
         <div class="stages" id="stages"></div>
       </aside>
     </div>
+    <article class="game-guide" aria-labelledby="guide-heading">
+      <h2 id="guide-heading">How to play Rage Bait</h2>
+      <p>Reach the exit in each room to clear the level and unlock the next one. That sounds easy until a cliff gives way, a saw rolls into your path, or the exit moves as you approach it. Rage Bait is a free browser game with 310 levels across ten stages. The first course has six ledges. By the end of Stage 1, you’ll tackle 40-ledge courses that can take you from hills and tunnels to water crossed by boat.</p>
+      <p>Use the status line under the game to see your current objective. In some rooms, reaching the door is only half the puzzle. You might need to carry an apple to a tree, touch switches in order, or jump into a button overhead to open a passage. Your campaign progress saves in this browser, and the Stages panel lets you replay any level you’ve unlocked.</p>
+      <h2>Controls</h2>
+      <ul>
+        <li>Use <kbd>A</kbd> and <kbd>D</kbd> or the left and right arrow keys to <strong>move</strong>. On a phone, hold either on-screen arrow.</li>
+        <li>Press <kbd>Space</kbd>, <kbd>W</kbd>, or the up arrow to <strong>jump or swim</strong>. On a phone, tap <strong>Jump</strong> for a jump or a swim stroke.</li>
+        <li>Press <kbd>R</kbd> or use <strong>Restart</strong> to start the current level again.</li>
+        <li>Choose <strong>Full screen</strong> for more room to see the route and use the touch controls.</li>
+      </ul>
+      <h2>Frequently asked questions</h2>
+      <h3>How do I get past surprise traps?</h3>
+      <p>Pause on solid ground and watch your next landing. Some spikes switch position or timing after you die, so check the ledge again before repeating a jump. If a cliff collapses, look for a smaller ledge below it. A crack in the ground or a warning flash can give you time to move.</p>
+      <h3>Why is the exit locked or moving?</h3>
+      <p>Read the status line for a pickup, delivery, or switch sequence. If the exit relocates, check where it landed and plan the route back before jumping. In rooms with size-changing pads, try shrinking for a low passage or getting bigger to reach an overhead switch.</p>
+      <h3>Do I ever run out of lives?</h3>
+      <p>No. You have unlimited retries. A death sends you back to the first room of the current level. If you want a timed run, the Daily Challenge offers one course that changes at midnight UK time. You can share your time and death count after finishing.</p>
+    </article>
     <footer class="site-footer">
       <a href="/privacy">Privacy</a>
       <button type="button" class="button" id="ad-privacy" hidden>Privacy and cookie settings</button>
