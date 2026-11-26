@@ -41,7 +41,8 @@ function gimmickDoor(course) {
 
 function gimmickFloorHidden(floor) {
   const puzzle=world.gimmick;
-  return puzzle?.type==='memory' && !puzzle.hiddenFound && floor===world.floors[puzzle.hiddenIndex];
+  return puzzle?.type==='memory' && !puzzle.hiddenFound && floor===world.floors[puzzle.hiddenIndex] &&
+    world.floors[puzzle.cliffIndex].hit===null;
 }
 
 function gimmickSolidActive(solid) {
@@ -51,7 +52,7 @@ function gimmickSolidActive(solid) {
 
 function gimmickHint(course) {
   const puzzle=course.gimmick;
-  if(puzzle?.type==='memory')return 'Remember the little ledge before the cliff drops.';
+  if(puzzle?.type==='memory')return 'Look for the marked ledge below. Drop to it when the cliff cracks.';
   if(puzzle?.type==='size')return 'Shrink for the tunnel. Grow and jump into the ceiling button.';
   return '';
 }
@@ -131,13 +132,10 @@ function drawGimmick() {
     rect(piece.x+3,piece.y+5,Math.max(1,piece.w/3),3,'#bb796e');
   }
   if(puzzle.type==='memory'){
-    const cliff=world.floors[puzzle.cliffIndex];
     const hidden=world.floors[puzzle.hiddenIndex];
-    if(!puzzle.hiddenFound){
-      const age=cliff.hit===null?Infinity:ticks-cliff.hit;
-      if(ticks<23 || (age<=cliff.grace+8&&Math.floor(age/3)%2===0)){
-        rect(hidden.x,hidden.y,hidden.w,2,'#f4c79adb');
-        rect(hidden.x+hidden.w/2-1,hidden.y-7,2,3,'#ffdea1');
+    if(gimmickFloorHidden(hidden)){
+      for(let x=0;x<hidden.w;x+=8){
+        rect(hidden.x+x,hidden.y,Math.min(5,hidden.w-x),2,'#f4c79adb');
       }
     }
   }

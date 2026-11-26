@@ -39,7 +39,8 @@ const campaignBlockingKinds = new Set(['crumble', 'cliff', 'blink']);
 
 function configureCampaignTraps(course, count, stageRank, seed, {fixed, signature, signatureFloor} = {}) {
   const rank = Math.max(0, Math.min(9, stageRank));
-  const floors = course.floors.slice(1, -1);
+  const landing = course.floors[course.gimmick?.hiddenIndex];
+  const floors = course.floors.slice(1, -1).filter(floor=>floor!==landing);
   const used = new Set();
   const taskMarkers = [...course.task?.items || [],course.task?.target,...(course.puzzlePoints||[])].filter(Boolean);
   const centerOf = floor => floor.x + floor.w / 2;
@@ -68,6 +69,7 @@ function configureCampaignTraps(course, count, stageRank, seed, {fixed, signatur
     course.exit && {...course.exit, radius:26, top:course.exit.y - 45, bottom:course.exit.y + 24},
     ...(!fixed ? taskMarkers.map(marker=>({...marker,radius:10,top:marker.y-22,bottom:marker.y+2})) : [])
   ].filter(Boolean);
+  if(landing)protectedAreas.push({x:centerOf(landing),radius:landing.w/2+16,top:landing.y-40,bottom:landing.y+4});
   course.obstacles = [];
   for (let i = 0; i < count; i++) {
     const authored = fixed?.[i];

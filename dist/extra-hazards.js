@@ -11,13 +11,16 @@ const extraHazardMessages = {
 function configureExtraHazards(course,count,rank,n,room,attempt,seed) {
   const strength=Math.min(9,Math.max(0,Math.floor(rank || 0)));
   const retry=Math.max(0,Math.floor(attempt || 0));
-  const floors=course.floors.slice(1,-1);
+  const landing=course.floors[course.gimmick?.hiddenIndex];
+  const memoryCliff=course.floors[course.gimmick?.cliffIndex];
+  const floors=course.floors.slice(1,-1).filter(floor=>floor!==landing&&floor!==memoryCliff);
   const points=[
     {point:course.spawn,clearance:17,above:23,below:1},
     {point:course.exit,clearance:26,above:45,below:24},
     ...[...(course.task?.items || []),course.task?.target].filter(Boolean)
       .map(point=>({point,clearance:17,above:22,below:2}))
   ];
+  if(landing)points.push({point:{x:landing.x+landing.w/2,y:landing.y},clearance:landing.w/2+16,above:40,below:4});
   const period=158+seed%17-strength*2;
   const delay=51+((seed>>>5)+retry*29+room*7)%61+(n===0?25:0);
   const lead=Math.max(15,25-strength);
