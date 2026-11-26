@@ -53,15 +53,28 @@ function loadStageAdScript(publisher) {
       window.googlefc.callbackQueue ||= [];
       window.googlefc.callbackQueue.push({CONSENT_API_READY:listenForStageAdConsent});
       window.adsbygoogle ||= [];
+      const source = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=' + publisher;
+      const verification = document.getElementById('adsense-verification');
+      const onLoad = () => {
+        listenForStageAdConsent();
+        resolve(true);
+      };
+      const onError = () => resolve(false);
+      if (verification?.src === source) {
+        if (verification.dataset.loadState === 'loaded') onLoad();
+        else if (verification.dataset.loadState === 'failed') onError();
+        else {
+          verification.addEventListener('load', onLoad, {once:true});
+          verification.addEventListener('error', onError, {once:true});
+        }
+        return;
+      }
       const script = document.createElement('script');
       script.async = true;
       script.crossOrigin = 'anonymous';
-      script.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=' + publisher;
-      script.addEventListener('load', () => {
-        listenForStageAdConsent();
-        resolve(true);
-      }, {once:true});
-      script.addEventListener('error', () => resolve(false), {once:true});
+      script.src = source;
+      script.addEventListener('load', onLoad, {once:true});
+      script.addEventListener('error', onError, {once:true});
       document.head.append(script);
     });
   }
