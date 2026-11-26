@@ -10,18 +10,6 @@ function adSettings(env) {
   return { account, ads };
 }
 
-const privacy = `<!doctype html>
-<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Privacy · Rage Bait</title>
-<style>body{margin:0;padding:28px;background:#171610;color:#fff1d9;font:1rem/1.6 system-ui,sans-serif}main{max-width:650px;margin:auto}a{color:#ffc64f}h1{line-height:1.1}</style>
-<main>
-<p><a href="/">Back to Rage Bait</a></p>
-<h1>Privacy</h1>
-<p>Rage Bait saves campaign progress, daily results, and cosmetic choices in your browser. Shared results include the challenge date, run time, and death count you choose to share.</p>
-<p>Stripe handles supporter payments on its hosted checkout. Rage Bait uses a browser cookie to recognise a completed purchase. <a href="https://stripe.com/privacy">Stripe’s privacy policy</a></p>
-<p>When ads are enabled, Google may use cookies or similar technologies to show and measure ads. Use Privacy and cookie settings to change your choices when the Google tool is available. <a href="https://policies.google.com/technologies/partner-sites">How Google uses information from sites that use its services</a></p>
-</main></html>`;
-
 function response(request, value, type, cache = 'no-cache', status = 200) {
   return new Response(request.method === 'HEAD' ? null : value, {
     status,
@@ -52,10 +40,7 @@ export default {
         ? response(request, 'google.com, ' + account + ', DIRECT, f08c47fec0942fa0\n', 'text/plain; charset=utf-8')
         : response(request, 'Not found', 'text/plain; charset=utf-8', 'no-store', 404);
     }
-    if (pathname === '/privacy') {
-      return response(request, privacy, 'text/html; charset=utf-8');
-    }
-    const path = pathname === '/' ? '/index.html' : pathname;
+    const path = pathname === '/' ? '/index.html' : pathname === '/privacy' ? '/privacy.html' : pathname;
     const asset = Object.hasOwn(publicAssets, path) ? publicAssets[path] : null;
     if (!asset) return response(request, 'Not found', 'text/plain; charset=utf-8', 'no-store', 404);
     const account = path === '/index.html' ? adSettings(env).account : null;

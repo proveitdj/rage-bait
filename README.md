@@ -2,7 +2,7 @@
 
 Rage Bait is a free browser platformer with 310 levels, unlimited retries, and traps that change position and timing after a death. Dodge lightning and giant saws, ride moving boats, and solve puzzles involving hidden ledges, moving exits, and size-changing pads.
 
-[Play Rage Bait](https://rage-bait-arcade.sacredhedgehog.chatgpt.site)
+[Play Rage Bait](https://ragebaitgame.co.uk/)
 
 ## Play
 
@@ -42,6 +42,18 @@ The build embeds the browser files in `dist/server/index.js`. Edit the game scri
 
 Set runtime values in the hosting environment. [`.env.example`](.env.example) lists the supported names.
 
+### Enable checkout on Netlify
+
+Deploy the repository to the Netlify project. `netlify.toml` publishes `dist/` and the supporter function serves the checkout routes on `https://ragebaitgame.co.uk`.
+
+1. Activate a Stripe account for live payments. In Stripe, create a restricted live API key with **Checkout Sessions** read and write access.
+2. In Netlify, open **Project configuration → Environment variables**. Add the key as `STRIPE_SECRET_KEY` and a stable random signing secret as `SUPPORTER_SIGNING_KEY`. For example, generate the signing secret locally with `openssl rand -hex 32`. Store both values as secrets for the **Production** deploy context and **Functions** scope.
+3. Redeploy the project. Open the game on `https://ragebaitgame.co.uk` and select **Supporter** to check that **Buy for £1.99** appears. The checkout creates the fixed £1.99 price in GBP.
+
+Keep the signing secret stable across deployments so previously issued purchase receipts continue to validate. Set `SUPPORTER_ORIGIN` only when moving checkout to a different canonical HTTPS domain.
+
+### Runtime variables
+
 | Variable | Purpose |
 | --- | --- |
 | `STRIPE_SECRET_KEY` | Restricted live Stripe key with read and write access to Checkout Sessions |
@@ -51,6 +63,6 @@ Set runtime values in the hosting environment. [`.env.example`](.env.example) li
 | `ADSENSE_STAGE_SLOT` | Display ad unit ID for the stage-complete screen |
 | `ADSENSE_CMP` | Set to `google` after publishing the Google consent message and configuring manual placement |
 
-The live site publishes the verification tag and `ads.txt` for `pub-7271416347446804`. Checkout requires a connected Stripe account, and stage ads require Google site approval and a configured ad unit.
+Stage ads require Google site approval and a configured ad unit. The Worker deployment serves `ads.txt` for `pub-7271416347446804`.
 
 [View the live ads.txt](https://rage-bait-arcade.sacredhedgehog.chatgpt.site/ads.txt)
